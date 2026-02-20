@@ -562,6 +562,7 @@ void nes_ppu::step_ppu(nes_ppu_cycle_t count)
         if (_cur_scanline >= PPU_SCANLINE_COUNT)
         {
             _cur_scanline %= PPU_SCANLINE_COUNT;
+            // Frame boundary: publish the finished frame by swapping read/write buffers.
             swap_buffer();
             _frame_count++;
             NES_TRACE4("[NES_PPU] FRAME " << std::dec << _frame_count << " ------ ");

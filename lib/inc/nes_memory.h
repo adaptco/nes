@@ -90,6 +90,10 @@ public :
 
     void load_mapper(shared_ptr<nes_mapper> &mapper);
 
+    const uint8_t *ram_data() const { return _ram.data(); }
+    uint8_t *ram_data() { return _ram.data(); }
+    size_t ram_size() const { return _ram.size(); }
+
     nes_mapper& get_mapper() { return *_mapper; }
 
 public :
