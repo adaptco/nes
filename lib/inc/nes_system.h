@@ -27,6 +27,26 @@ enum nes_rom_exec_mode
 };
 
 
+struct nes_system_snapshot
+{
+    // Pointer to the latest fully completed frame (palette-index pixels).
+    const uint8_t *frame_buffer;
+    uint16_t frame_width;
+    uint16_t frame_height;
+
+    // CPU RAM (full CPU-visible RAM array).
+    const uint8_t *cpu_ram;
+    size_t cpu_ram_size;
+
+    // PPU memory useful for visual/state embeddings.
+    const uint8_t *ppu_vram;
+    size_t ppu_vram_size;
+
+    const uint8_t *ppu_oam;
+    size_t ppu_oam_size;
+};
+
+
 //
 // The NES system hardware that manages all the invidual components - CPU, PPU, APU, RAM, etc
 // It synchronizes between different components
@@ -53,6 +73,16 @@ public :
     nes_memory  *ram()      { return _ram.get();   }
     nes_ppu     *ppu()      { return _ppu.get();   } 
     nes_input   *input()    { return _input.get(); }
+
+    // Returns a read-only snapshot view for deterministic embedding extraction.
+    //
+    // Snapshot contract:
+    // - frame_buffer points to the latest fully completed frame only.
+    // - The frame pointer remains stable until the next PPU frame boundary swap.
+    // - PPU swaps buffers at the 261->0 scanline transition (end of frame).
+    // - Callers should sample snapshots at a consistent point in emulation timing for
+    //   reproducible embeddings.
+    nes_system_snapshot snapshot() const;
 
 public :
     //

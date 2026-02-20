@@ -43,6 +43,27 @@ void nes_system::reset()
         comp->reset();
 }
 
+
+nes_system_snapshot nes_system::snapshot() const
+{
+    nes_system_snapshot s{};
+
+    s.frame_buffer = _ppu->frame_buffer();
+    s.frame_width = _ppu->frame_width();
+    s.frame_height = _ppu->frame_height();
+
+    s.cpu_ram = _ram->ram_data();
+    s.cpu_ram_size = _ram->ram_size();
+
+    s.ppu_vram = _ppu->vram();
+    s.ppu_vram_size = _ppu->vram_size();
+
+    s.ppu_oam = _ppu->oam();
+    s.ppu_oam_size = _ppu->oam_size();
+
+    return s;
+}
+
 void nes_system::run_program(vector<uint8_t> &&program, uint16_t addr)
 {
     _ram->set_bytes(addr, program.data(), program.size());
