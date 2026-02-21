@@ -4,6 +4,7 @@
 // http://wiki.nesdev.com/w/index.php/Standard_controller
 
 #include <cstdint>
+#include <vector>
 
 #define NES_CONTROLLER_STROBE_BIT 0x1
 
@@ -36,6 +37,25 @@ public :
     virtual ~nes_input_device() = 0;
 };
 
+// Deterministic replay input device backed by a fixed stream of button flags.
+// Each call to poll_status() advances to next item in the stream.
+class nes_replay_input_device : public nes_input_device
+{
+public :
+    nes_replay_input_device();
+    nes_replay_input_device(const std::vector<nes_button_flags> &stream, bool hold_last = true);
+
+    virtual nes_button_flags poll_status() override;
+
+    void set_stream(const std::vector<nes_button_flags> &stream, bool hold_last = true);
+    void reset();
+
+private :
+    std::vector<nes_button_flags> _stream;
+    size_t _cursor;
+    bool _hold_last;
+};
+
 class nes_input : public nes_component
 {
 public :
@@ -59,6 +79,11 @@ public :
 
 public :
     void register_input(int id, shared_ptr<nes_input_device> input) { _user_inputs[id] = input; }
+    void set_input_provider(int id, shared_ptr<nes_input_device> input) { register_input(id, input); }
+    void register_input_stream(int id, const std::vector<nes_button_flags> &stream, bool hold_last = true)
+    {
+        _user_inputs[id] = std::make_shared<nes_replay_input_device>(stream, hold_last);
+    }
     void unregister_input(int id) { _user_inputs[id] = nullptr; }
     void unregister_all_inputs() { for (auto &input : _user_inputs) input = nullptr; }
 
