@@ -10,7 +10,12 @@ using namespace std;
 namespace
 {
     static const uint32_t NES_STATE_MAGIC = 0x3153454e; // NES1
-    static const uint32_t NES_STATE_VERSION = 1;
+    static const uint32_t NES_STATE_VERSION = 2;
+
+    static const uint32_t NES_STATE_CHUNK_CPU = 0x20555043;   // CPU 
+    static const uint32_t NES_STATE_CHUNK_RAM = 0x204d4152;   // RAM 
+    static const uint32_t NES_STATE_CHUNK_PPU = 0x20555050;   // PPU 
+    static const uint32_t NES_STATE_CHUNK_INPT = 0x54504e49;  // INPT
 
     void push_u32(vector<uint8_t> &out, uint32_t v)
     {
@@ -43,6 +48,31 @@ namespace
         v = 0;
         for (int i = 0; i < 8; ++i)
             v |= (uint64_t(data[offset++]) << (i * 8));
+        return true;
+    }
+
+    void push_chunk(vector<uint8_t> &out, uint32_t chunk_id, const vector<uint8_t> &chunk_data)
+    {
+        push_u32(out, chunk_id);
+        push_u32(out, uint32_t(chunk_data.size()));
+        out.insert(out.end(), chunk_data.begin(), chunk_data.end());
+    }
+
+    bool read_chunk(const uint8_t *data, size_t size, size_t &offset, uint32_t expected_chunk_id, const uint8_t *&chunk, size_t &chunk_size)
+    {
+        uint32_t chunk_id = 0;
+        uint32_t len = 0;
+        if (!read_u32(data, size, offset, chunk_id) || !read_u32(data, size, offset, len))
+            return false;
+
+        if (chunk_id != expected_chunk_id)
+            return false;
+        if (offset + len > size)
+            return false;
+
+        chunk = data + offset;
+        chunk_size = len;
+        offset += len;
         return true;
     }
 }
@@ -116,10 +146,20 @@ nes_state_blob nes_system::serialize() const
     push_u64(blob.data, uint64_t(_master_cycle.count()));
     blob.data.push_back(_stop_requested ? 1 : 0);
 
-    _cpu->serialize(blob.data);
-    _ram->serialize(blob.data);
-    _ppu->serialize(blob.data);
-    _input->serialize(blob.data);
+    vector<uint8_t> cpu_state;
+    vector<uint8_t> ram_state;
+    vector<uint8_t> ppu_state;
+    vector<uint8_t> input_state;
+
+    _cpu->serialize(cpu_state);
+    _ram->serialize(ram_state);
+    _ppu->serialize(ppu_state);
+    _input->serialize(input_state);
+
+    push_chunk(blob.data, NES_STATE_CHUNK_CPU, cpu_state);
+    push_chunk(blob.data, NES_STATE_CHUNK_RAM, ram_state);
+    push_chunk(blob.data, NES_STATE_CHUNK_PPU, ppu_state);
+    push_chunk(blob.data, NES_STATE_CHUNK_INPT, input_state);
 
     return blob;
 }
@@ -146,13 +186,31 @@ bool nes_system::deserialize(const nes_state_blob &state)
     _master_cycle = nes_cycle_t((int64_t)master_cycle);
     _stop_requested = data[offset++] != 0;
 
-    if (!_cpu->deserialize(data, size, offset))
+    const uint8_t *chunk = nullptr;
+    size_t chunk_size = 0;
+
+    if (!read_chunk(data, size, offset, NES_STATE_CHUNK_CPU, chunk, chunk_size))
         return false;
-    if (!_ram->deserialize(data, size, offset))
+    size_t chunk_offset = 0;
+    if (!_cpu->deserialize(chunk, chunk_size, chunk_offset) || chunk_offset != chunk_size)
         return false;
-    if (!_ppu->deserialize(data, size, offset))
+
+    if (!read_chunk(data, size, offset, NES_STATE_CHUNK_RAM, chunk, chunk_size))
         return false;
-    if (!_input->deserialize(data, size, offset))
+    chunk_offset = 0;
+    if (!_ram->deserialize(chunk, chunk_size, chunk_offset) || chunk_offset != chunk_size)
+        return false;
+
+    if (!read_chunk(data, size, offset, NES_STATE_CHUNK_PPU, chunk, chunk_size))
+        return false;
+    chunk_offset = 0;
+    if (!_ppu->deserialize(chunk, chunk_size, chunk_offset) || chunk_offset != chunk_size)
+        return false;
+
+    if (!read_chunk(data, size, offset, NES_STATE_CHUNK_INPT, chunk, chunk_size))
+        return false;
+    chunk_offset = 0;
+    if (!_input->deserialize(chunk, chunk_size, chunk_offset) || chunk_offset != chunk_size)
         return false;
 
     return offset == size;
