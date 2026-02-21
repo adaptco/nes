@@ -28,6 +28,62 @@ void nes_cpu::reset()
 
 }
 
+
+
+void nes_cpu::serialize(vector<uint8_t> &out) const
+{
+    out.push_back(_context.A);
+    out.push_back(_context.X);
+    out.push_back(_context.Y);
+    out.push_back(uint8_t(_context.PC & 0xff));
+    out.push_back(uint8_t((_context.PC >> 8) & 0xff));
+    out.push_back(_context.S);
+    out.push_back(_context.P);
+
+    auto cycle = uint64_t(_cycle.count());
+    for (int i = 0; i < 8; ++i)
+        out.push_back(uint8_t((cycle >> (i * 8)) & 0xff));
+
+    out.push_back(_nmi_pending ? 1 : 0);
+    out.push_back(_dma_pending ? 1 : 0);
+    out.push_back(uint8_t(_dma_addr & 0xff));
+    out.push_back(uint8_t((_dma_addr >> 8) & 0xff));
+    out.push_back(_stop_at_infinite_loop ? 1 : 0);
+    out.push_back(_is_stop_at_addr ? 1 : 0);
+    out.push_back(uint8_t(_stop_at_addr & 0xff));
+    out.push_back(uint8_t((_stop_at_addr >> 8) & 0xff));
+}
+
+bool nes_cpu::deserialize(const uint8_t *data, size_t size, size_t &offset)
+{
+    if (offset + 23 > size)
+        return false;
+
+    _context.A = data[offset++];
+    _context.X = data[offset++];
+    _context.Y = data[offset++];
+    _context.PC = uint16_t(data[offset]) | (uint16_t(data[offset + 1]) << 8);
+    offset += 2;
+    _context.S = data[offset++];
+    _context.P = data[offset++];
+
+    uint64_t cycle = 0;
+    for (int i = 0; i < 8; ++i)
+        cycle |= (uint64_t(data[offset++]) << (i * 8));
+    _cycle = nes_cycle_t((int64_t)cycle);
+
+    _nmi_pending = data[offset++] != 0;
+    _dma_pending = data[offset++] != 0;
+    _dma_addr = uint16_t(data[offset]) | (uint16_t(data[offset + 1]) << 8);
+    offset += 2;
+    _stop_at_infinite_loop = data[offset++] != 0;
+    _is_stop_at_addr = data[offset++] != 0;
+    _stop_at_addr = uint16_t(data[offset]) | (uint16_t(data[offset + 1]) << 8);
+    offset += 2;
+
+    return true;
+}
+
 void nes_cpu::poke(uint16_t addr, uint8_t value)
 { 
     _mem->set_byte(addr, value); 
@@ -1540,50 +1596,69 @@ void nes_cpu::XAA(nes_addr_mode addr_mode) { assert(false); }
 void nes_cpu::AHX(nes_addr_mode addr_mode) { assert(false); }
 void nes_cpu::TAS(nes_addr_mode addr_mode) { assert(false); }
 void nes_cpu::LAS(nes_addr_mode addr_mode) { assert(false); }
-
-void nes_cpu::serialize(nes_state_stream &stream) const
+namespace
 {
-    stream.write(_context);
-    auto cycle = _cycle.count();
-    stream.write(cycle);
+    template <typename T>
+    void append_state(std::vector<uint8_t> &out, const T &value)
+    {
+        auto begin = reinterpret_cast<const uint8_t *>(&value);
+        out.insert(out.end(), begin, begin + sizeof(T));
+    }
 
-    uint8_t nmi_pending = _nmi_pending ? 1 : 0;
-    uint8_t dma_pending = _dma_pending ? 1 : 0;
-    uint8_t stop_at_infinite_loop = _stop_at_infinite_loop ? 1 : 0;
-    uint8_t is_stop_at_addr = _is_stop_at_addr ? 1 : 0;
+    template <typename T>
+    bool read_state(const std::vector<uint8_t> &in, size_t &offset, T *value)
+    {
+        if (offset + sizeof(T) > in.size())
+            return false;
 
-    stream.write(nmi_pending);
-    stream.write(dma_pending);
-    stream.write(_dma_addr);
-    stream.write(stop_at_infinite_loop);
-    stream.write(is_stop_at_addr);
-    stream.write(_stop_at_addr);
+        memcpy(value, in.data() + offset, sizeof(T));
+        offset += sizeof(T);
+        return true;
+    }
 }
 
-bool nes_cpu::deserialize(nes_state_stream &stream)
+void nes_cpu::serialize(vector<uint8_t> &out) const
 {
-    if (!stream.read(_context)) return false;
+    append_state(out, _context.A);
+    append_state(out, _context.X);
+    append_state(out, _context.Y);
+    append_state(out, _context.PC);
+    append_state(out, _context.S);
+    append_state(out, _context.P);
 
-    int64_t cycle = 0;
-    if (!stream.read(cycle)) return false;
+    int64_t cycle = _cycle.count();
+    append_state(out, cycle);
+
+    append_state(out, _nmi_pending);
+    append_state(out, _dma_pending);
+    append_state(out, _dma_addr);
+    append_state(out, _stop_at_infinite_loop);
+    append_state(out, _is_stop_at_addr);
+    append_state(out, _stop_at_addr);
+}
+
+bool nes_cpu::deserialize(const vector<uint8_t> &in, size_t &offset)
+{
+    int64_t cycle;
+
+    bool ok =
+        read_state(in, offset, &_context.A) &&
+        read_state(in, offset, &_context.X) &&
+        read_state(in, offset, &_context.Y) &&
+        read_state(in, offset, &_context.PC) &&
+        read_state(in, offset, &_context.S) &&
+        read_state(in, offset, &_context.P) &&
+        read_state(in, offset, &cycle) &&
+        read_state(in, offset, &_nmi_pending) &&
+        read_state(in, offset, &_dma_pending) &&
+        read_state(in, offset, &_dma_addr) &&
+        read_state(in, offset, &_stop_at_infinite_loop) &&
+        read_state(in, offset, &_is_stop_at_addr) &&
+        read_state(in, offset, &_stop_at_addr);
+
+    if (!ok)
+        return false;
+
     _cycle = nes_cycle_t(cycle);
-
-    uint8_t nmi_pending = 0;
-    uint8_t dma_pending = 0;
-    uint8_t stop_at_infinite_loop = 0;
-    uint8_t is_stop_at_addr = 0;
-
-    if (!stream.read(nmi_pending)) return false;
-    if (!stream.read(dma_pending)) return false;
-    if (!stream.read(_dma_addr)) return false;
-    if (!stream.read(stop_at_infinite_loop)) return false;
-    if (!stream.read(is_stop_at_addr)) return false;
-    if (!stream.read(_stop_at_addr)) return false;
-
-    _nmi_pending = (nmi_pending != 0);
-    _dma_pending = (dma_pending != 0);
-    _stop_at_infinite_loop = (stop_at_infinite_loop != 0);
-    _is_stop_at_addr = (is_stop_at_addr != 0);
-
-    return stream.ok();
+    return true;
 }

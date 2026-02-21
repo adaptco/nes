@@ -4,6 +4,7 @@
 // http://wiki.nesdev.com/w/index.php/Standard_controller
 
 #include <cstdint>
+#include <vector>
 
 class nes_state_stream;
 
@@ -38,6 +39,8 @@ public :
     virtual ~nes_input_device() = 0;
 };
 
+using namespace std;
+
 class nes_input : public nes_component
 {
 public :
@@ -61,11 +64,47 @@ public :
 
 public :
     void register_input(int id, shared_ptr<nes_input_device> input) { _user_inputs[id] = input; }
+    void serialize(vector<uint8_t> &out) const;
+    bool deserialize(const vector<uint8_t> &in, size_t &offset);
     void unregister_input(int id) { _user_inputs[id] = nullptr; }
     void unregister_all_inputs() { for (auto &input : _user_inputs) input = nullptr; }
 
-    void serialize(nes_state_stream &stream) const;
-    bool deserialize(nes_state_stream &stream);
+    void serialize(vector<uint8_t> &out) const
+    {
+        out.push_back(_strobe_on ? 1 : 0);
+        for (int i = 0; i < NES_MAX_PLAYER; ++i)
+        {
+            out.push_back((uint8_t)_button_flags[i]);
+            out.push_back(_button_id[i]);
+        }
+    }
+
+    bool deserialize(const uint8_t *data, size_t size, size_t &offset)
+    {
+        size_t bytes = 1 + NES_MAX_PLAYER * 2;
+        if (offset + bytes > size)
+            return false;
+
+        _strobe_on = data[offset++] != 0;
+        for (int i = 0; i < NES_MAX_PLAYER; ++i)
+        {
+            _button_flags[i] = (nes_button_flags)data[offset++];
+            _button_id[i] = data[offset++];
+        }
+
+        return true;
+    }
+
+private :
+    void init()
+    {
+        _strobe_on = false;
+        for (int i = 0; i < NES_MAX_PLAYER; ++i)
+        {
+            _button_flags[i] = nes_button_flags_none;
+            _button_id[i] = 0;
+        }
+    }
 
     void write_CONTROLLER(uint8_t val)
     {

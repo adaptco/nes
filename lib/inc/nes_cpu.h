@@ -152,8 +152,8 @@ public :
     void request_nmi() { _nmi_pending = true; };
     void request_dma(uint16_t addr) { _dma_pending = true; _dma_addr = addr; }
 
-    void serialize(nes_state_stream &stream) const;
-    bool deserialize(nes_state_stream &stream);
+    void serialize(vector<uint8_t> &out) const;
+    bool deserialize(const uint8_t *data, size_t size, size_t &offset);
 
 public :
     //

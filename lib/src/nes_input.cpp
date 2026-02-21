@@ -6,32 +6,47 @@
 // Make compiler happy about pure virtual dtors
 nes_input_device::~nes_input_device()
 {}
-
-void nes_input::serialize(nes_state_stream &stream) const
+namespace
 {
-    uint8_t strobe_on = _strobe_on ? 1 : 0;
-    stream.write(strobe_on);
-    for (int i = 0; i < NES_MAX_PLAYER; ++i)
+    template <typename T>
+    void append_state(std::vector<uint8_t> &out, const T &value)
     {
-        auto button_flags = uint8_t(_button_flags[i]);
-        stream.write(button_flags);
-        stream.write(_button_id[i]);
+        auto begin = reinterpret_cast<const uint8_t *>(&value);
+        out.insert(out.end(), begin, begin + sizeof(T));
+    }
+
+    template <typename T>
+    bool read_state(const std::vector<uint8_t> &in, size_t &offset, T *value)
+    {
+        if (offset + sizeof(T) > in.size())
+            return false;
+
+        memcpy(value, in.data() + offset, sizeof(T));
+        offset += sizeof(T);
+        return true;
     }
 }
 
-bool nes_input::deserialize(nes_state_stream &stream)
+void nes_input::serialize(vector<uint8_t> &out) const
 {
-    uint8_t strobe_on = 0;
-    if (!stream.read(strobe_on)) return false;
-    _strobe_on = (strobe_on != 0);
+    append_state(out, _strobe_on);
+    out.insert(out.end(), reinterpret_cast<const uint8_t *>(_button_flags), reinterpret_cast<const uint8_t *>(_button_flags) + sizeof(_button_flags));
+    out.insert(out.end(), _button_id, _button_id + sizeof(_button_id));
+}
 
-    for (int i = 0; i < NES_MAX_PLAYER; ++i)
-    {
-        uint8_t button_flags = 0;
-        if (!stream.read(button_flags)) return false;
-        _button_flags[i] = nes_button_flags(button_flags);
-        if (!stream.read(_button_id[i])) return false;
-    }
+bool nes_input::deserialize(const vector<uint8_t> &in, size_t &offset)
+{
+    bool ok = read_state(in, offset, &_strobe_on);
+    if (!ok)
+        return false;
 
-    return stream.ok();
+    if (offset + sizeof(_button_flags) + sizeof(_button_id) > in.size())
+        return false;
+
+    memcpy(_button_flags, in.data() + offset, sizeof(_button_flags));
+    offset += sizeof(_button_flags);
+    memcpy(_button_id, in.data() + offset, sizeof(_button_id));
+    offset += sizeof(_button_id);
+
+    return true;
 }
