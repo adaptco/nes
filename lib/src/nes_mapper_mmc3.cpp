@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include <cstring>
 
 //
 // Called when mapper is loaded into memory

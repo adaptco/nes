@@ -124,6 +124,9 @@ private :
         return 0x40 | ((_button_flags[id] >> (7 - _button_id[id]++)) & 0x1);
     }
 
+    void serialize(vector<uint8_t> &out) const;
+    bool deserialize(const uint8_t *&ptr, const uint8_t *end);
+
 private :
     void init()
     {

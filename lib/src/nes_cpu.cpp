@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include <cstring>
 #include "nes_cpu.h"
 #include "nes_system.h"
 #include "nes_trace.h"

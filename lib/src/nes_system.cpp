@@ -1,10 +1,13 @@
 #include "stdafx.h"
+#include <cstring>
 
 #include "nes_cpu.h"
 #include "nes_memory.h"
 #include "nes_input.h"
 #include "nes_system.h"
 #include "nes_ppu.h"
+#include "nes_memory.h"
+#include "nes_input.h"
 
 #include <array>
 

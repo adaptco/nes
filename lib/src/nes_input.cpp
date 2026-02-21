@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include <cstring>
 
 #include <nes_input.h>
 #include <nes_mapper.h>
