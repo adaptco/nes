@@ -38,6 +38,30 @@ void nes_mapper_mmc3::get_info(nes_mapper_info &info)
         info.flags = nes_mapper_flags(info.flags | nes_mapper_flags_vertical_mirroring);
 }
 
+
+
+void nes_mapper_mmc3::serialize(vector<uint8_t> &out) const
+{
+    out.push_back(_bank_select);
+    out.push_back(_prev_prg_mode);
+    out.push_back(_vertical_mirroring ? 1 : 0);
+}
+
+bool nes_mapper_mmc3::deserialize(const uint8_t *data, size_t size, size_t &offset)
+{
+    if (offset + 3 > size)
+        return false;
+
+    _bank_select = data[offset++];
+    _prev_prg_mode = data[offset++];
+    _vertical_mirroring = data[offset++] != 0;
+
+    if (_ppu)
+        _ppu->set_mirroring(nes_mapper_flags(_vertical_mirroring ? nes_mapper_flags_vertical_mirroring : nes_mapper_flags_horizontal_mirroring));
+
+    return true;
+}
+
 void nes_mapper_mmc3::write_reg(uint16_t addr, uint8_t val)
 {
     if (addr <= 0x9fff)
