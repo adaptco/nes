@@ -4,6 +4,7 @@
 #include <nes_trace.h>
 #include <memory>
 #include <fstream>
+#include <vector>
 
 #include <common.h>
 
@@ -71,6 +72,9 @@ public :
     //
     virtual void write_reg(uint16_t addr, uint8_t val) {};
 
+    virtual void serialize(vector<uint8_t> &out) const {}
+    virtual bool deserialize(const uint8_t *&ptr, const uint8_t *end) { return true; }
+
     virtual ~nes_mapper() {}
 };
 
@@ -108,6 +112,10 @@ public :
         :_prg_rom(prg_rom), _chr_rom(chr_rom), _vertical_mirroring(vertical_mirroring)
     {
         _bit_latch = 0;
+        _reg = 0;
+        _control = 0x0c;
+        _ppu = nullptr;
+        _mem = nullptr;
     }
 
     virtual void on_load_ram(nes_memory &mem);
@@ -115,6 +123,8 @@ public :
     virtual void get_info(nes_mapper_info &info);
 
     virtual void write_reg(uint16_t addr, uint8_t val);
+    virtual void serialize(vector<uint8_t> &out) const;
+    virtual bool deserialize(const uint8_t *&ptr, const uint8_t *end);
 
  private :
     void write_control(uint8_t val);
@@ -150,6 +160,8 @@ public:
         _prev_prg_mode = 1;
 
         _bank_select = 0;
+        _ppu = nullptr;
+        _mem = nullptr;
     }
 
     virtual void on_load_ram(nes_memory &mem);
@@ -157,6 +169,8 @@ public:
     virtual void get_info(nes_mapper_info &info);
 
     virtual void write_reg(uint16_t addr, uint8_t val);
+    virtual void serialize(vector<uint8_t> &out) const;
+    virtual bool deserialize(const uint8_t *&ptr, const uint8_t *end);
 
 private:
     void write_bank_select(uint8_t val);

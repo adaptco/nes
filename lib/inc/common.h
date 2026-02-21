@@ -3,6 +3,10 @@
 #ifdef _MSC_VER
 #else
 #include <cstdlib>
+#include <cerrno>
+#include <cstring>
+
+typedef int errno_t;
 
 static errno_t memcpy_s(void *dest, size_t dest_size, const void *src, size_t count)
 {

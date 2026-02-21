@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include <cstring>
 
 #include "nes_ppu.h"
 #include "nes_system.h"
@@ -574,4 +575,175 @@ void nes_ppu::step_ppu(nes_ppu_cycle_t count)
         }
         NES_TRACE4("[NES_PPU] SCANLINE " << std::dec << (uint32_t) _cur_scanline << " ------ ");
     }
+}
+namespace
+{
+    template<typename T>
+    void write_scalar(vector<uint8_t> &out, const T &value)
+    {
+        const uint8_t *p = reinterpret_cast<const uint8_t *>(&value);
+        out.insert(out.end(), p, p + sizeof(T));
+    }
+
+    template<typename T>
+    bool read_scalar(const uint8_t *&ptr, const uint8_t *end, T &value)
+    {
+        if (end - ptr < (ptrdiff_t)sizeof(T))
+            return false;
+        memcpy(&value, ptr, sizeof(T));
+        ptr += sizeof(T);
+        return true;
+    }
+
+    bool read_bytes(const uint8_t *&ptr, const uint8_t *end, uint8_t *dst, size_t size)
+    {
+        if (end - ptr < (ptrdiff_t)size)
+            return false;
+        memcpy(dst, ptr, size);
+        ptr += size;
+        return true;
+    }
+}
+
+void nes_ppu::serialize(vector<uint8_t> &out) const
+{
+    write_scalar(out, _name_tbl_addr);
+    write_scalar(out, _bg_pattern_tbl_addr);
+    write_scalar(out, _sprite_pattern_tbl_addr);
+    write_scalar(out, _ppu_addr_inc);
+    write_scalar(out, _vblank_nmi);
+    write_scalar(out, _use_8x16_sprite);
+    write_scalar(out, _sprite_height);
+
+    write_scalar(out, _show_bg);
+    write_scalar(out, _show_sprites);
+    write_scalar(out, _gray_scale_mode);
+
+    write_scalar(out, _latch);
+    write_scalar(out, _sprite_overflow);
+    write_scalar(out, _vblank_started);
+    write_scalar(out, _sprite_0_hit);
+
+    write_scalar(out, _oam_addr);
+    write_scalar(out, _addr_toggle);
+
+    write_scalar(out, _ppu_addr);
+    write_scalar(out, _temp_ppu_addr);
+    write_scalar(out, _fine_x_scroll);
+    write_scalar(out, _scroll_y);
+    write_scalar(out, _vram_read_buf);
+
+    int64_t master = _master_cycle.count();
+    int64_t scanline = _scanline_cycle.count();
+    write_scalar(out, master);
+    write_scalar(out, scanline);
+    write_scalar(out, _cur_scanline);
+    write_scalar(out, _frame_count);
+
+    write_scalar(out, _protect_register);
+    write_scalar(out, _stop_after_frame);
+    write_scalar(out, _auto_stop);
+
+    write_scalar(out, _tile_index);
+    write_scalar(out, _tile_palette_bit32);
+    write_scalar(out, _bitplane0);
+    write_scalar(out, _shift_reg);
+    write_scalar(out, _x_offset);
+
+    write_scalar(out, _last_sprite_id);
+    write_scalar(out, _has_sprite_0);
+    write_scalar(out, _mask_oam_read);
+    write_scalar(out, _sprite_pos_y);
+
+    uint8_t frame_buffer_id = (_frame_buffer == _frame_buffer_1) ? 1 : 2;
+    write_scalar(out, frame_buffer_id);
+
+    out.insert(out.end(), _vram.get(), _vram.get() + PPU_VRAM_SIZE);
+    out.insert(out.end(), _oam.get(), _oam.get() + PPU_OAM_SIZE);
+    out.insert(out.end(), _frame_buffer_1, _frame_buffer_1 + sizeof(_frame_buffer_1));
+    out.insert(out.end(), _frame_buffer_bg, _frame_buffer_bg + sizeof(_frame_buffer_bg));
+    out.insert(out.end(), _frame_buffer_2, _frame_buffer_2 + sizeof(_frame_buffer_2));
+    out.insert(out.end(), _pixel_cycle, _pixel_cycle + sizeof(_pixel_cycle));
+    out.insert(out.end(), reinterpret_cast<const uint8_t *>(_sprite_buf), reinterpret_cast<const uint8_t *>(_sprite_buf) + sizeof(_sprite_buf));
+
+    uint16_t mirroring = static_cast<uint16_t>(_mirroring_flags);
+    write_scalar(out, mirroring);
+}
+
+bool nes_ppu::deserialize(const uint8_t *&ptr, const uint8_t *end)
+{
+    if (!read_scalar(ptr, end, _name_tbl_addr) ||
+        !read_scalar(ptr, end, _bg_pattern_tbl_addr) ||
+        !read_scalar(ptr, end, _sprite_pattern_tbl_addr) ||
+        !read_scalar(ptr, end, _ppu_addr_inc) ||
+        !read_scalar(ptr, end, _vblank_nmi) ||
+        !read_scalar(ptr, end, _use_8x16_sprite) ||
+        !read_scalar(ptr, end, _sprite_height) ||
+        !read_scalar(ptr, end, _show_bg) ||
+        !read_scalar(ptr, end, _show_sprites) ||
+        !read_scalar(ptr, end, _gray_scale_mode) ||
+        !read_scalar(ptr, end, _latch) ||
+        !read_scalar(ptr, end, _sprite_overflow) ||
+        !read_scalar(ptr, end, _vblank_started) ||
+        !read_scalar(ptr, end, _sprite_0_hit) ||
+        !read_scalar(ptr, end, _oam_addr) ||
+        !read_scalar(ptr, end, _addr_toggle) ||
+        !read_scalar(ptr, end, _ppu_addr) ||
+        !read_scalar(ptr, end, _temp_ppu_addr) ||
+        !read_scalar(ptr, end, _fine_x_scroll) ||
+        !read_scalar(ptr, end, _scroll_y) ||
+        !read_scalar(ptr, end, _vram_read_buf))
+    {
+        return false;
+    }
+
+    int64_t master;
+    int64_t scanline;
+    if (!read_scalar(ptr, end, master) || !read_scalar(ptr, end, scanline) ||
+        !read_scalar(ptr, end, _cur_scanline) || !read_scalar(ptr, end, _frame_count))
+    {
+        return false;
+    }
+    _master_cycle = nes_cycle_t(master);
+    _scanline_cycle = nes_ppu_cycle_t(scanline);
+
+    if (!read_scalar(ptr, end, _protect_register) ||
+        !read_scalar(ptr, end, _stop_after_frame) ||
+        !read_scalar(ptr, end, _auto_stop) ||
+        !read_scalar(ptr, end, _tile_index) ||
+        !read_scalar(ptr, end, _tile_palette_bit32) ||
+        !read_scalar(ptr, end, _bitplane0) ||
+        !read_scalar(ptr, end, _shift_reg) ||
+        !read_scalar(ptr, end, _x_offset) ||
+        !read_scalar(ptr, end, _last_sprite_id) ||
+        !read_scalar(ptr, end, _has_sprite_0) ||
+        !read_scalar(ptr, end, _mask_oam_read) ||
+        !read_scalar(ptr, end, _sprite_pos_y))
+    {
+        return false;
+    }
+
+    uint8_t frame_buffer_id;
+    if (!read_scalar(ptr, end, frame_buffer_id))
+        return false;
+
+    if (!read_bytes(ptr, end, _vram.get(), PPU_VRAM_SIZE) ||
+        !read_bytes(ptr, end, _oam.get(), PPU_OAM_SIZE) ||
+        !read_bytes(ptr, end, _frame_buffer_1, sizeof(_frame_buffer_1)) ||
+        !read_bytes(ptr, end, _frame_buffer_bg, sizeof(_frame_buffer_bg)) ||
+        !read_bytes(ptr, end, _frame_buffer_2, sizeof(_frame_buffer_2)) ||
+        !read_bytes(ptr, end, _pixel_cycle, sizeof(_pixel_cycle)) ||
+        !read_bytes(ptr, end, reinterpret_cast<uint8_t *>(_sprite_buf), sizeof(_sprite_buf)))
+    {
+        return false;
+    }
+
+    uint16_t mirroring;
+    if (!read_scalar(ptr, end, mirroring))
+        return false;
+
+    _frame_buffer = (frame_buffer_id == 1) ? _frame_buffer_1 : _frame_buffer_2;
+    _mirroring_flags = static_cast<nes_mapper_flags>(mirroring);
+
+    return true;
 }

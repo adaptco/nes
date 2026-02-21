@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 #include <nes_component.h>
 #include <nes_cycle.h>
@@ -445,6 +446,9 @@ public :
     void write_OAMDMA(uint8_t val);
 
     void oam_dma(uint16_t addr);
+
+    void serialize(vector<uint8_t> &out) const;
+    bool deserialize(const uint8_t *&ptr, const uint8_t *end);
 
 private :
     struct sprite_info

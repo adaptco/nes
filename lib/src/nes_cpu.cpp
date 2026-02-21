@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include <cstring>
 #include "nes_cpu.h"
 #include "nes_system.h"
 #include "nes_trace.h"
@@ -1540,3 +1541,73 @@ void nes_cpu::XAA(nes_addr_mode addr_mode) { assert(false); }
 void nes_cpu::AHX(nes_addr_mode addr_mode) { assert(false); }
 void nes_cpu::TAS(nes_addr_mode addr_mode) { assert(false); }
 void nes_cpu::LAS(nes_addr_mode addr_mode) { assert(false); }
+namespace
+{
+    template<typename T>
+    void write_scalar(vector<uint8_t> &out, const T &value)
+    {
+        const uint8_t *p = reinterpret_cast<const uint8_t *>(&value);
+        out.insert(out.end(), p, p + sizeof(T));
+    }
+
+    template<typename T>
+    bool read_scalar(const uint8_t *&ptr, const uint8_t *end, T &value)
+    {
+        if (end - ptr < (ptrdiff_t)sizeof(T))
+            return false;
+        memcpy(&value, ptr, sizeof(T));
+        ptr += sizeof(T);
+        return true;
+    }
+}
+
+void nes_cpu::serialize(vector<uint8_t> &out) const
+{
+    write_scalar(out, _context.A);
+    write_scalar(out, _context.X);
+    write_scalar(out, _context.Y);
+    write_scalar(out, _context.PC);
+    write_scalar(out, _context.S);
+    write_scalar(out, _context.P);
+
+    int64_t cycle = _cycle.count();
+    write_scalar(out, cycle);
+
+    write_scalar(out, _nmi_pending);
+    write_scalar(out, _dma_pending);
+    write_scalar(out, _dma_addr);
+
+    write_scalar(out, _stop_at_infinite_loop);
+    write_scalar(out, _is_stop_at_addr);
+    write_scalar(out, _stop_at_addr);
+}
+
+bool nes_cpu::deserialize(const uint8_t *&ptr, const uint8_t *end)
+{
+    if (!read_scalar(ptr, end, _context.A) ||
+        !read_scalar(ptr, end, _context.X) ||
+        !read_scalar(ptr, end, _context.Y) ||
+        !read_scalar(ptr, end, _context.PC) ||
+        !read_scalar(ptr, end, _context.S) ||
+        !read_scalar(ptr, end, _context.P))
+    {
+        return false;
+    }
+
+    int64_t cycle;
+    if (!read_scalar(ptr, end, cycle))
+        return false;
+    _cycle = nes_cycle_t(cycle);
+
+    if (!read_scalar(ptr, end, _nmi_pending) ||
+        !read_scalar(ptr, end, _dma_pending) ||
+        !read_scalar(ptr, end, _dma_addr) ||
+        !read_scalar(ptr, end, _stop_at_infinite_loop) ||
+        !read_scalar(ptr, end, _is_stop_at_addr) ||
+        !read_scalar(ptr, end, _stop_at_addr))
+    {
+        return false;
+    }
+
+    return true;
+}

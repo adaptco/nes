@@ -34,6 +34,11 @@ enum nes_rom_exec_mode
 class nes_system
 {
 public :
+    struct nes_state
+    {
+        vector<uint8_t> bytes;
+    };
+
     nes_system();
     ~nes_system();
 
@@ -48,6 +53,9 @@ public :
     void run_rom(const char *rom_path, nes_rom_exec_mode mode);
 
     void load_rom(const char *rom_path, nes_rom_exec_mode mode);
+
+    nes_state serialize() const;
+    bool deserialize(const nes_state &state);
    
     nes_cpu     *cpu()      { return _cpu.get();   }
     nes_memory  *ram()      { return _ram.get();   }

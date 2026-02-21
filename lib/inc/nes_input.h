@@ -4,6 +4,7 @@
 // http://wiki.nesdev.com/w/index.php/Standard_controller
 
 #include <cstdint>
+#include <vector>
 
 #define NES_CONTROLLER_STROBE_BIT 0x1
 
@@ -96,6 +97,9 @@ public :
         // 0x40 is from the open bus
         return 0x40 | ((_button_flags[id] >> (7 - _button_id[id]++)) & 0x1);
     }
+
+    void serialize(vector<uint8_t> &out) const;
+    bool deserialize(const uint8_t *&ptr, const uint8_t *end);
 
 private :
     void reload()

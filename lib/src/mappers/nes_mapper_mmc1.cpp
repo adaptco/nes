@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include <cstring>
 
 //
 // Called when mapper is loaded into memory
@@ -178,4 +179,47 @@ void nes_mapper_mmc1::write_prg_bank(uint8_t val)
         // 32KB mode at $8000
         _mem->set_bytes(0x8000, _prg_rom->data() + (val & 0xe) * 0x4000, 0x8000);
     }
+}
+namespace
+{
+    template<typename T>
+    void write_scalar(vector<uint8_t> &out, const T &value)
+    {
+        const uint8_t *p = reinterpret_cast<const uint8_t *>(&value);
+        out.insert(out.end(), p, p + sizeof(T));
+    }
+
+    template<typename T>
+    bool read_scalar(const uint8_t *&ptr, const uint8_t *end, T &value)
+    {
+        if (end - ptr < (ptrdiff_t)sizeof(T))
+            return false;
+        memcpy(&value, ptr, sizeof(T));
+        ptr += sizeof(T);
+        return true;
+    }
+}
+
+void nes_mapper_mmc1::serialize(vector<uint8_t> &out) const
+{
+    write_scalar(out, _vertical_mirroring);
+    write_scalar(out, _bit_latch);
+    write_scalar(out, _reg);
+    write_scalar(out, _control);
+}
+
+bool nes_mapper_mmc1::deserialize(const uint8_t *&ptr, const uint8_t *end)
+{
+    if (!read_scalar(ptr, end, _vertical_mirroring) ||
+        !read_scalar(ptr, end, _bit_latch) ||
+        !read_scalar(ptr, end, _reg) ||
+        !read_scalar(ptr, end, _control))
+    {
+        return false;
+    }
+
+    if (_ppu)
+        _ppu->set_mirroring(nes_mapper_flags(_control & nes_mapper_flags_mirroring_mask));
+
+    return true;
 }
