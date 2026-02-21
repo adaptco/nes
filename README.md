@@ -107,6 +107,14 @@ neschan.exe *rom_path*
 
 Sorry. No fancy UI yet. 
 
+Deterministic replay/headless example:
+
+```
+neschan <rom_path> --replay input.log --headless --max-frames 600
+```
+
+Replay log format is `<frame_index> <button_flags>`; see `doc/replay_input_log.md`.
+
 ## Next steps
 
 In the order of "most likely" to "probably never going to happen"... :)
