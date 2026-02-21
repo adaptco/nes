@@ -62,6 +62,8 @@ public :
 
 public :
     void register_input(int id, shared_ptr<nes_input_device> input) { _user_inputs[id] = input; }
+    void serialize(vector<uint8_t> &out) const;
+    bool deserialize(const vector<uint8_t> &in, size_t &offset);
     void unregister_input(int id) { _user_inputs[id] = nullptr; }
     void unregister_all_inputs() { for (auto &input : _user_inputs) input = nullptr; }
 

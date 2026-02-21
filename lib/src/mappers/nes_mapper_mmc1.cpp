@@ -128,6 +128,7 @@ MMC1 can do CHR banking in 4KB chunks. Known carts with CHR RAM have 8 KiB, so t
 */
 void nes_mapper_mmc1::write_chr_bank_0(uint8_t val)
 {
+    _chr_bank_0 = val;
     uint32_t addr;
     uint16_t size;
     if (_control & 0x10)
@@ -159,6 +160,7 @@ CCCCC
 */
 void nes_mapper_mmc1::write_chr_bank_1(uint8_t val)
 {
+    _chr_bank_1 = val;
     if (_control & 0x10)
     {
         // 4KB mode only
@@ -183,6 +185,7 @@ RPPPP
 */
 void nes_mapper_mmc1::write_prg_bank(uint8_t val)
 {
+    _prg_bank = val;
     if (_control & 0x8)
     {
         // 16KB mode
@@ -204,4 +207,57 @@ void nes_mapper_mmc1::write_prg_bank(uint8_t val)
         // 32KB mode at $8000
         _mem->set_bytes(0x8000, _prg_rom->data() + (val & 0xe) * 0x4000, 0x8000);
     }
+}
+
+namespace
+{
+    template <typename T>
+    void append_state(std::vector<uint8_t> &out, const T &value)
+    {
+        auto begin = reinterpret_cast<const uint8_t *>(&value);
+        out.insert(out.end(), begin, begin + sizeof(T));
+    }
+
+    template <typename T>
+    bool read_state(const std::vector<uint8_t> &in, size_t &offset, T *value)
+    {
+        if (offset + sizeof(T) > in.size())
+            return false;
+
+        memcpy(value, in.data() + offset, sizeof(T));
+        offset += sizeof(T);
+        return true;
+    }
+}
+
+void nes_mapper_mmc1::serialize(vector<uint8_t> &out) const
+{
+    append_state(out, _vertical_mirroring);
+    append_state(out, _bit_latch);
+    append_state(out, _reg);
+    append_state(out, _control);
+    append_state(out, _chr_bank_0);
+    append_state(out, _chr_bank_1);
+    append_state(out, _prg_bank);
+}
+
+bool nes_mapper_mmc1::deserialize(const vector<uint8_t> &in, size_t &offset)
+{
+    bool ok =
+        read_state(in, offset, &_vertical_mirroring) &&
+        read_state(in, offset, &_bit_latch) &&
+        read_state(in, offset, &_reg) &&
+        read_state(in, offset, &_control) &&
+        read_state(in, offset, &_chr_bank_0) &&
+        read_state(in, offset, &_chr_bank_1) &&
+        read_state(in, offset, &_prg_bank);
+
+    if (!ok)
+        return false;
+
+    write_control(_control);
+    write_chr_bank_0(_chr_bank_0);
+    write_chr_bank_1(_chr_bank_1);
+    write_prg_bank(_prg_bank);
+    return true;
 }
