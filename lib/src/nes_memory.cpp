@@ -73,3 +73,67 @@ void nes_memory::set_byte(uint16_t addr, uint8_t val)
 
     _ram[addr] = val;
 }
+namespace
+{
+    template <typename T>
+    void append_state(std::vector<uint8_t> &out, const T &value)
+    {
+        auto begin = reinterpret_cast<const uint8_t *>(&value);
+        out.insert(out.end(), begin, begin + sizeof(T));
+    }
+
+    template <typename T>
+    bool read_state(const std::vector<uint8_t> &in, size_t &offset, T *value)
+    {
+        if (offset + sizeof(T) > in.size())
+            return false;
+
+        memcpy(value, in.data() + offset, sizeof(T));
+        offset += sizeof(T);
+        return true;
+    }
+}
+
+void nes_memory::serialize(vector<uint8_t> &out) const
+{
+    out.insert(out.end(), _ram.begin(), _ram.end());
+
+    append_state(out, _mapper_info.code_addr);
+    append_state(out, _mapper_info.reg_start);
+    append_state(out, _mapper_info.reg_end);
+    append_state(out, _mapper_info.flags);
+
+    bool has_mapper = (_mapper != nullptr);
+    append_state(out, has_mapper);
+    if (has_mapper)
+        _mapper->serialize(out);
+}
+
+bool nes_memory::deserialize(const vector<uint8_t> &in, size_t &offset)
+{
+    if (offset + RAM_SIZE > in.size())
+        return false;
+
+    memcpy(_ram.data(), in.data() + offset, RAM_SIZE);
+    offset += RAM_SIZE;
+
+    bool ok =
+        read_state(in, offset, &_mapper_info.code_addr) &&
+        read_state(in, offset, &_mapper_info.reg_start) &&
+        read_state(in, offset, &_mapper_info.reg_end) &&
+        read_state(in, offset, &_mapper_info.flags);
+
+    bool has_mapper;
+    ok = ok && read_state(in, offset, &has_mapper);
+    if (!ok)
+        return false;
+
+    if (has_mapper)
+    {
+        if (!_mapper)
+            return false;
+        return _mapper->deserialize(in, offset);
+    }
+
+    return true;
+}
