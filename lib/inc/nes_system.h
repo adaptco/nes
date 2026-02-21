@@ -46,6 +46,11 @@ struct nes_system_snapshot
     size_t ppu_oam_size;
 };
 
+struct nes_state_blob
+{
+    vector<uint8_t> data;
+};
+
 
 //
 // The NES system hardware that manages all the invidual components - CPU, PPU, APU, RAM, etc
@@ -83,6 +88,9 @@ public :
     // - Callers should sample snapshots at a consistent point in emulation timing for
     //   reproducible embeddings.
     nes_system_snapshot snapshot() const;
+
+    nes_state_blob serialize() const;
+    bool deserialize(const nes_state_blob &state);
 
 public :
     //

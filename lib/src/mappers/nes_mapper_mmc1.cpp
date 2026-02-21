@@ -40,6 +40,32 @@ void nes_mapper_mmc1::get_info(nes_mapper_info &info)
         info.flags = nes_mapper_flags(info.flags | nes_mapper_flags_vertical_mirroring);
 }
 
+
+
+void nes_mapper_mmc1::serialize(vector<uint8_t> &out) const
+{
+    out.push_back(_bit_latch);
+    out.push_back(_reg);
+    out.push_back(_control);
+    out.push_back(_vertical_mirroring ? 1 : 0);
+}
+
+bool nes_mapper_mmc1::deserialize(const uint8_t *data, size_t size, size_t &offset)
+{
+    if (offset + 4 > size)
+        return false;
+
+    _bit_latch = data[offset++];
+    _reg = data[offset++];
+    _control = data[offset++];
+    _vertical_mirroring = data[offset++] != 0;
+
+    if (_ppu)
+        _ppu->set_mirroring(nes_mapper_flags(_control & nes_mapper_flags_mirroring_mask));
+
+    return true;
+}
+
 void nes_mapper_mmc1::write_reg(uint16_t addr, uint8_t val) 
 {
     if (val & 0x80)
