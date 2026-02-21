@@ -575,3 +575,189 @@ void nes_ppu::step_ppu(nes_ppu_cycle_t count)
         NES_TRACE4("[NES_PPU] SCANLINE " << std::dec << (uint32_t) _cur_scanline << " ------ ");
     }
 }
+
+void nes_ppu::serialize(nes_state_stream &stream) const
+{
+    stream.write_bytes(_vram.get(), PPU_VRAM_SIZE);
+    stream.write_bytes(_oam.get(), PPU_OAM_SIZE);
+
+    stream.write(_name_tbl_addr);
+    stream.write(_bg_pattern_tbl_addr);
+    stream.write(_sprite_pattern_tbl_addr);
+    stream.write(_ppu_addr_inc);
+
+    uint8_t vblank_nmi = _vblank_nmi ? 1 : 0;
+    uint8_t use_8x16_sprite = _use_8x16_sprite ? 1 : 0;
+    uint8_t show_bg = _show_bg ? 1 : 0;
+    uint8_t show_sprites = _show_sprites ? 1 : 0;
+    uint8_t gray_scale_mode = _gray_scale_mode ? 1 : 0;
+    uint8_t sprite_overflow = _sprite_overflow ? 1 : 0;
+    uint8_t vblank_started = _vblank_started ? 1 : 0;
+    uint8_t sprite_0_hit = _sprite_0_hit ? 1 : 0;
+    uint8_t addr_toggle = _addr_toggle ? 1 : 0;
+    uint8_t protect_register = _protect_register ? 1 : 0;
+    uint8_t auto_stop = _auto_stop ? 1 : 0;
+    uint8_t has_sprite_0 = _has_sprite_0 ? 1 : 0;
+    uint8_t mask_oam_read = _mask_oam_read ? 1 : 0;
+
+    stream.write(vblank_nmi);
+    stream.write(use_8x16_sprite);
+    stream.write(_sprite_height);
+    stream.write(show_bg);
+    stream.write(show_sprites);
+    stream.write(gray_scale_mode);
+
+    stream.write(_latch);
+    stream.write(sprite_overflow);
+    stream.write(vblank_started);
+    stream.write(sprite_0_hit);
+
+    stream.write(_oam_addr);
+    stream.write(addr_toggle);
+
+    stream.write(_ppu_addr);
+    stream.write(_temp_ppu_addr);
+    stream.write(_fine_x_scroll);
+    stream.write(_scroll_y);
+
+    stream.write(_vram_read_buf);
+
+    stream.write(_master_cycle.count());
+    stream.write(_scanline_cycle.count());
+    stream.write(_cur_scanline);
+    stream.write(_frame_count);
+
+    stream.write(protect_register);
+    stream.write(_stop_after_frame);
+    stream.write(auto_stop);
+
+    stream.write(_tile_index);
+    stream.write(_tile_palette_bit32);
+    stream.write(_bitplane0);
+
+    uint8_t frame_buffer_selector = (_frame_buffer == _frame_buffer_1) ? 1 : 2;
+    stream.write(frame_buffer_selector);
+    stream.write_bytes(_frame_buffer_1, sizeof(_frame_buffer_1));
+    stream.write_bytes(_frame_buffer_bg, sizeof(_frame_buffer_bg));
+    stream.write_bytes(_frame_buffer_2, sizeof(_frame_buffer_2));
+    stream.write_bytes(_pixel_cycle, sizeof(_pixel_cycle));
+
+    stream.write(_shift_reg);
+    stream.write(_x_offset);
+
+    stream.write_bytes(reinterpret_cast<const uint8_t*>(_sprite_buf), sizeof(_sprite_buf));
+    stream.write(_last_sprite_id);
+    stream.write(has_sprite_0);
+    stream.write(mask_oam_read);
+    stream.write(_sprite_pos_y);
+
+    auto mirroring_flags = uint16_t(_mirroring_flags);
+    stream.write(mirroring_flags);
+}
+
+bool nes_ppu::deserialize(nes_state_stream &stream)
+{
+    if (!stream.read_bytes(_vram.get(), PPU_VRAM_SIZE)) return false;
+    if (!stream.read_bytes(_oam.get(), PPU_OAM_SIZE)) return false;
+
+    if (!stream.read(_name_tbl_addr)) return false;
+    if (!stream.read(_bg_pattern_tbl_addr)) return false;
+    if (!stream.read(_sprite_pattern_tbl_addr)) return false;
+    if (!stream.read(_ppu_addr_inc)) return false;
+
+    uint8_t vblank_nmi = 0;
+    uint8_t use_8x16_sprite = 0;
+    uint8_t show_bg = 0;
+    uint8_t show_sprites = 0;
+    uint8_t gray_scale_mode = 0;
+    uint8_t sprite_overflow = 0;
+    uint8_t vblank_started = 0;
+    uint8_t sprite_0_hit = 0;
+    uint8_t addr_toggle = 0;
+    uint8_t protect_register = 0;
+    uint8_t auto_stop = 0;
+    uint8_t has_sprite_0 = 0;
+    uint8_t mask_oam_read = 0;
+
+    if (!stream.read(vblank_nmi)) return false;
+    if (!stream.read(use_8x16_sprite)) return false;
+    if (!stream.read(_sprite_height)) return false;
+    if (!stream.read(show_bg)) return false;
+    if (!stream.read(show_sprites)) return false;
+    if (!stream.read(gray_scale_mode)) return false;
+
+    if (!stream.read(_latch)) return false;
+    if (!stream.read(sprite_overflow)) return false;
+    if (!stream.read(vblank_started)) return false;
+    if (!stream.read(sprite_0_hit)) return false;
+
+    if (!stream.read(_oam_addr)) return false;
+    if (!stream.read(addr_toggle)) return false;
+
+    if (!stream.read(_ppu_addr)) return false;
+    if (!stream.read(_temp_ppu_addr)) return false;
+    if (!stream.read(_fine_x_scroll)) return false;
+    if (!stream.read(_scroll_y)) return false;
+
+    if (!stream.read(_vram_read_buf)) return false;
+
+    int64_t master_cycle = 0;
+    int64_t scanline_cycle = 0;
+    if (!stream.read(master_cycle)) return false;
+    if (!stream.read(scanline_cycle)) return false;
+    _master_cycle = nes_cycle_t(master_cycle);
+    _scanline_cycle = nes_ppu_cycle_t(scanline_cycle);
+
+    if (!stream.read(_cur_scanline)) return false;
+    if (!stream.read(_frame_count)) return false;
+
+    if (!stream.read(protect_register)) return false;
+    if (!stream.read(_stop_after_frame)) return false;
+    if (!stream.read(auto_stop)) return false;
+
+    if (!stream.read(_tile_index)) return false;
+    if (!stream.read(_tile_palette_bit32)) return false;
+    if (!stream.read(_bitplane0)) return false;
+
+    uint8_t frame_buffer_selector = 0;
+    if (!stream.read(frame_buffer_selector)) return false;
+    if (!stream.read_bytes(_frame_buffer_1, sizeof(_frame_buffer_1))) return false;
+    if (!stream.read_bytes(_frame_buffer_bg, sizeof(_frame_buffer_bg))) return false;
+    if (!stream.read_bytes(_frame_buffer_2, sizeof(_frame_buffer_2))) return false;
+    if (!stream.read_bytes(_pixel_cycle, sizeof(_pixel_cycle))) return false;
+
+    if (!stream.read(_shift_reg)) return false;
+    if (!stream.read(_x_offset)) return false;
+
+    if (!stream.read_bytes(reinterpret_cast<uint8_t*>(_sprite_buf), sizeof(_sprite_buf))) return false;
+    if (!stream.read(_last_sprite_id)) return false;
+    if (!stream.read(has_sprite_0)) return false;
+    if (!stream.read(mask_oam_read)) return false;
+    if (!stream.read(_sprite_pos_y)) return false;
+
+    uint16_t mirroring_flags = 0;
+    if (!stream.read(mirroring_flags)) return false;
+
+    _vblank_nmi = (vblank_nmi != 0);
+    _use_8x16_sprite = (use_8x16_sprite != 0);
+    _show_bg = (show_bg != 0);
+    _show_sprites = (show_sprites != 0);
+    _gray_scale_mode = (gray_scale_mode != 0);
+    _sprite_overflow = (sprite_overflow != 0);
+    _vblank_started = (vblank_started != 0);
+    _sprite_0_hit = (sprite_0_hit != 0);
+    _addr_toggle = (addr_toggle != 0);
+    _protect_register = (protect_register != 0);
+    _auto_stop = (auto_stop != 0);
+    _has_sprite_0 = (has_sprite_0 != 0);
+    _mask_oam_read = (mask_oam_read != 0);
+
+    if (frame_buffer_selector == 1)
+        _frame_buffer = _frame_buffer_1;
+    else
+        _frame_buffer = _frame_buffer_2;
+
+    _mirroring_flags = nes_mapper_flags(mirroring_flags);
+
+    return stream.ok();
+}

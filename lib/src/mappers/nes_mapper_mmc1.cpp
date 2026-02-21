@@ -179,3 +179,22 @@ void nes_mapper_mmc1::write_prg_bank(uint8_t val)
         _mem->set_bytes(0x8000, _prg_rom->data() + (val & 0xe) * 0x4000, 0x8000);
     }
 }
+
+void nes_mapper_mmc1::serialize(nes_state_stream &stream) const
+{
+    stream.write(_bit_latch);
+    stream.write(_reg);
+    stream.write(_control);
+}
+
+bool nes_mapper_mmc1::deserialize(nes_state_stream &stream)
+{
+    if (!stream.read(_bit_latch)) return false;
+    if (!stream.read(_reg)) return false;
+    if (!stream.read(_control)) return false;
+
+    if (_ppu)
+        _ppu->set_mirroring(nes_mapper_flags(_control & nes_mapper_flags_mirroring_mask));
+
+    return stream.ok();
+}

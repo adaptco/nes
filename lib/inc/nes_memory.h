@@ -92,6 +92,9 @@ public :
 
     nes_mapper& get_mapper() { return *_mapper; }
 
+    void serialize(nes_state_stream &stream) const;
+    bool deserialize(nes_state_stream &stream);
+
 public :
     //
     // nes_component overrides

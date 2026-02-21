@@ -3,11 +3,81 @@
 #include <cstdint>
 #include <nes_trace.h>
 #include <memory>
+#include <vector>
+
+#include <cstring>
 #include <fstream>
+#include <type_traits>
 
 #include <common.h>
 
 using namespace std;
+
+
+class nes_state_stream
+{
+public:
+    nes_state_stream(vector<uint8_t> &buf)
+        : _buf(buf), _offset(0), _ok(true)
+    {
+    }
+
+    size_t offset() const { return _offset; }
+    bool ok() const { return _ok; }
+
+    template<typename T>
+    void write(const T &v)
+    {
+        static_assert(std::is_trivially_copyable<T>::value, "state write requires trivially copyable type");
+        auto old_size = _buf.size();
+        _buf.resize(old_size + sizeof(T));
+        memcpy(&_buf[old_size], &v, sizeof(T));
+    }
+
+    void write_bytes(const uint8_t *src, size_t size)
+    {
+        if (!size) return;
+        auto old_size = _buf.size();
+        _buf.resize(old_size + size);
+        memcpy(&_buf[old_size], src, size);
+    }
+
+    template<typename T>
+    bool read(T &v)
+    {
+        static_assert(std::is_trivially_copyable<T>::value, "state read requires trivially copyable type");
+        if (_offset + sizeof(T) > _buf.size())
+        {
+            _ok = false;
+            memset(&v, 0, sizeof(T));
+            return false;
+        }
+
+        memcpy(&v, &_buf[_offset], sizeof(T));
+        _offset += sizeof(T);
+        return true;
+    }
+
+    bool read_bytes(uint8_t *dest, size_t size)
+    {
+        if (_offset + size > _buf.size())
+        {
+            _ok = false;
+            return false;
+        }
+
+        if (size)
+            memcpy(dest, &_buf[_offset], size);
+
+        _offset += size;
+        return true;
+    }
+
+private:
+    vector<uint8_t> &_buf;
+    size_t _offset;
+    bool _ok;
+};
 
 enum nes_mapper_flags : uint16_t 
 {
@@ -71,6 +141,9 @@ public :
     //
     virtual void write_reg(uint16_t addr, uint8_t val) {};
 
+    virtual void serialize(nes_state_stream &stream) const {}
+    virtual bool deserialize(nes_state_stream &stream) { return stream.ok(); }
+
     virtual ~nes_mapper() {}
 };
 
@@ -115,6 +188,8 @@ public :
     virtual void get_info(nes_mapper_info &info);
 
     virtual void write_reg(uint16_t addr, uint8_t val);
+    virtual void serialize(nes_state_stream &stream) const;
+    virtual bool deserialize(nes_state_stream &stream);
 
  private :
     void write_control(uint8_t val);
@@ -157,6 +232,8 @@ public:
     virtual void get_info(nes_mapper_info &info);
 
     virtual void write_reg(uint16_t addr, uint8_t val);
+    virtual void serialize(nes_state_stream &stream) const;
+    virtual bool deserialize(nes_state_stream &stream);
 
 private:
     void write_bank_select(uint8_t val);

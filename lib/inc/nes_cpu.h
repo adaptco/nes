@@ -152,6 +152,9 @@ public :
     void request_nmi() { _nmi_pending = true; };
     void request_dma(uint16_t addr) { _dma_pending = true; _dma_addr = addr; }
 
+    void serialize(nes_state_stream &stream) const;
+    bool deserialize(nes_state_stream &stream);
+
 public :
     //
     // Stack operations

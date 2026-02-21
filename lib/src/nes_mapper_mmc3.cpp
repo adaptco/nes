@@ -221,3 +221,28 @@ void nes_mapper_mmc3::write_bank_data(uint8_t val)
     }
 }
 
+
+
+void nes_mapper_mmc3::serialize(nes_state_stream &stream) const
+{
+    stream.write(_bank_select);
+    stream.write(_prev_prg_mode);
+
+    uint8_t vertical_mirroring = _vertical_mirroring ? 1 : 0;
+    stream.write(vertical_mirroring);
+}
+
+bool nes_mapper_mmc3::deserialize(nes_state_stream &stream)
+{
+    if (!stream.read(_bank_select)) return false;
+    if (!stream.read(_prev_prg_mode)) return false;
+
+    uint8_t vertical_mirroring = 0;
+    if (!stream.read(vertical_mirroring)) return false;
+    _vertical_mirroring = (vertical_mirroring != 0);
+
+    if (_ppu)
+        _ppu->set_mirroring(nes_mapper_flags(_vertical_mirroring ? nes_mapper_flags_vertical_mirroring : nes_mapper_flags_horizontal_mirroring));
+
+    return stream.ok();
+}

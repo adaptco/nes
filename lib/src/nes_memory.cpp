@@ -73,3 +73,13 @@ void nes_memory::set_byte(uint16_t addr, uint8_t val)
 
     _ram[addr] = val;
 }
+
+void nes_memory::serialize(nes_state_stream &stream) const
+{
+    stream.write_bytes(_ram.data(), _ram.size());
+}
+
+bool nes_memory::deserialize(nes_state_stream &stream)
+{
+    return stream.read_bytes(_ram.data(), _ram.size());
+}

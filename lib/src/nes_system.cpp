@@ -4,6 +4,8 @@
 #include "nes_system.h"
 #include "nes_ppu.h"
 
+#include <array>
+
 using namespace std;
 
 nes_system::nes_system()
@@ -97,3 +99,75 @@ void nes_system::step(nes_cycle_t count)
     _ppu->step_to(_master_cycle);
 }
     
+
+namespace
+{
+    constexpr uint32_t NES_STATE_MAGIC = 0x53454E43; // "CNES"
+    constexpr uint16_t NES_STATE_VERSION = 1;
+}
+
+nes_state nes_system::serialize() const
+{
+    nes_state state;
+    nes_state_stream stream(state.blob);
+
+    stream.write(NES_STATE_MAGIC);
+    stream.write(NES_STATE_VERSION);
+
+    auto master_cycle = _master_cycle.count();
+    stream.write(master_cycle);
+
+    uint8_t stop_requested = _stop_requested ? 1 : 0;
+    stream.write(stop_requested);
+
+    _cpu->serialize(stream);
+    _ram->serialize(stream);
+    _ppu->serialize(stream);
+    _input->serialize(stream);
+
+    _ram->get_mapper().serialize(stream);
+
+    return state;
+}
+
+bool nes_system::deserialize(const nes_state &state)
+{
+    auto state_copy = state.blob;
+    nes_state_stream stream(state_copy);
+
+    uint32_t magic = 0;
+    uint16_t version = 0;
+
+    if (!stream.read(magic)) return false;
+    if (!stream.read(version)) return false;
+
+    if (magic != NES_STATE_MAGIC)
+        return false;
+
+    if (version != NES_STATE_VERSION)
+        return false;
+
+    int64_t master_cycle = 0;
+    if (!stream.read(master_cycle)) return false;
+
+    uint8_t stop_requested = 0;
+    if (!stream.read(stop_requested)) return false;
+
+    if (!_cpu->deserialize(stream)) return false;
+    if (!_ram->deserialize(stream)) return false;
+    if (!_ppu->deserialize(stream)) return false;
+    if (!_input->deserialize(stream)) return false;
+
+    if (!_ram->get_mapper().deserialize(stream)) return false;
+
+    if (!stream.ok())
+        return false;
+
+    if (stream.offset() != state_copy.size())
+        return false;
+
+    _master_cycle = nes_cycle_t(master_cycle);
+    _stop_requested = (stop_requested != 0);
+
+    return true;
+}

@@ -164,6 +164,9 @@ public :
 
     void set_mirroring(nes_mapper_flags flags);
 
+    void serialize(nes_state_stream &stream) const;
+    bool deserialize(nes_state_stream &stream);
+
     uint8_t *frame_buffer()
     {
         // Return the completed buffer

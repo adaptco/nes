@@ -1540,3 +1540,50 @@ void nes_cpu::XAA(nes_addr_mode addr_mode) { assert(false); }
 void nes_cpu::AHX(nes_addr_mode addr_mode) { assert(false); }
 void nes_cpu::TAS(nes_addr_mode addr_mode) { assert(false); }
 void nes_cpu::LAS(nes_addr_mode addr_mode) { assert(false); }
+
+void nes_cpu::serialize(nes_state_stream &stream) const
+{
+    stream.write(_context);
+    auto cycle = _cycle.count();
+    stream.write(cycle);
+
+    uint8_t nmi_pending = _nmi_pending ? 1 : 0;
+    uint8_t dma_pending = _dma_pending ? 1 : 0;
+    uint8_t stop_at_infinite_loop = _stop_at_infinite_loop ? 1 : 0;
+    uint8_t is_stop_at_addr = _is_stop_at_addr ? 1 : 0;
+
+    stream.write(nmi_pending);
+    stream.write(dma_pending);
+    stream.write(_dma_addr);
+    stream.write(stop_at_infinite_loop);
+    stream.write(is_stop_at_addr);
+    stream.write(_stop_at_addr);
+}
+
+bool nes_cpu::deserialize(nes_state_stream &stream)
+{
+    if (!stream.read(_context)) return false;
+
+    int64_t cycle = 0;
+    if (!stream.read(cycle)) return false;
+    _cycle = nes_cycle_t(cycle);
+
+    uint8_t nmi_pending = 0;
+    uint8_t dma_pending = 0;
+    uint8_t stop_at_infinite_loop = 0;
+    uint8_t is_stop_at_addr = 0;
+
+    if (!stream.read(nmi_pending)) return false;
+    if (!stream.read(dma_pending)) return false;
+    if (!stream.read(_dma_addr)) return false;
+    if (!stream.read(stop_at_infinite_loop)) return false;
+    if (!stream.read(is_stop_at_addr)) return false;
+    if (!stream.read(_stop_at_addr)) return false;
+
+    _nmi_pending = (nmi_pending != 0);
+    _dma_pending = (dma_pending != 0);
+    _stop_at_infinite_loop = (stop_at_infinite_loop != 0);
+    _is_stop_at_addr = (is_stop_at_addr != 0);
+
+    return stream.ok();
+}
