@@ -96,6 +96,9 @@ public :
 
     nes_mapper& get_mapper() { return *_mapper; }
 
+    void serialize(vector<uint8_t> &out) const;
+    bool deserialize(const uint8_t *data, size_t size, size_t &offset);
+
 public :
     //
     // nes_component overrides

@@ -164,6 +164,9 @@ public :
 
     void set_mirroring(nes_mapper_flags flags);
 
+    void serialize(vector<uint8_t> &out) const;
+    bool deserialize(const uint8_t *data, size_t size, size_t &offset);
+
     // Returns the latest fully rendered frame buffer (double-buffered read buffer).
     // Contract:
     // - This pointer always points to the completed frame.
