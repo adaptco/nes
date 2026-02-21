@@ -55,6 +55,25 @@ I've tested with following games:
   * Teenager Mutant Turtle 2 - freeze on start
   * Teenager Mutant Turtle 3 - freeze on start
 
+
+## Containerized development
+
+A Docker container is included for reproducible local development.
+
+### Build the container
+
+```bash
+docker build -t neschan-dev .
+```
+
+### Start an interactive shell
+
+```bash
+docker run --rm -it -v "$PWD":/workspace/nes -w /workspace/nes neschan-dev
+```
+
+From inside the container, run your preferred build commands (for example CMake/Ninja).
+
 ## How to build
 
 ### Building on Windows
