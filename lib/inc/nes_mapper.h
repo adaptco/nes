@@ -71,6 +71,9 @@ public :
     //
     virtual void write_reg(uint16_t addr, uint8_t val) {};
 
+    virtual void serialize(vector<uint8_t> &out) const {}
+    virtual bool deserialize(const uint8_t *data, size_t size, size_t &offset) { return true; }
+
     virtual ~nes_mapper() {}
 };
 
@@ -113,6 +116,8 @@ public :
     virtual void on_load_ram(nes_memory &mem);
     virtual void on_load_ppu(nes_ppu &ppu);
     virtual void get_info(nes_mapper_info &info);
+    virtual void serialize(vector<uint8_t> &out) const;
+    virtual bool deserialize(const uint8_t *data, size_t size, size_t &offset);
 
     virtual void write_reg(uint16_t addr, uint8_t val);
 
@@ -155,6 +160,8 @@ public:
     virtual void on_load_ram(nes_memory &mem);
     virtual void on_load_ppu(nes_ppu &ppu);
     virtual void get_info(nes_mapper_info &info);
+    virtual void serialize(vector<uint8_t> &out) const;
+    virtual bool deserialize(const uint8_t *data, size_t size, size_t &offset);
 
     virtual void write_reg(uint16_t addr, uint8_t val);
 

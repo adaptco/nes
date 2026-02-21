@@ -73,3 +73,25 @@ void nes_memory::set_byte(uint16_t addr, uint8_t val)
 
     _ram[addr] = val;
 }
+
+void nes_memory::serialize(vector<uint8_t> &out) const
+{
+    out.insert(out.end(), _ram.begin(), _ram.end());
+
+    if (_mapper)
+        _mapper->serialize(out);
+}
+
+bool nes_memory::deserialize(const uint8_t *data, size_t size, size_t &offset)
+{
+    if (offset + RAM_SIZE > size)
+        return false;
+
+    memcpy_s(_ram.data(), _ram.size(), data + offset, RAM_SIZE);
+    offset += RAM_SIZE;
+
+    if (_mapper)
+        return _mapper->deserialize(data, size, offset);
+
+    return true;
+}
