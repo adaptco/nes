@@ -90,11 +90,18 @@ public :
 
     void load_mapper(shared_ptr<nes_mapper> &mapper);
 
+    const uint8_t *ram_data() const { return _ram.data(); }
+    uint8_t *ram_data() { return _ram.data(); }
+    size_t ram_size() const { return _ram.size(); }
+
     nes_mapper& get_mapper() { return *_mapper; }
     bool has_mapper() const { return _mapper != nullptr; }
 
     void serialize(vector<uint8_t> &out) const;
     bool deserialize(const uint8_t *&ptr, const uint8_t *end);
+
+    void serialize(vector<uint8_t> &out) const;
+    bool deserialize(const uint8_t *data, size_t size, size_t &offset);
 
 public :
     //

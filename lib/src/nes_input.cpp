@@ -2,53 +2,52 @@
 #include <cstring>
 
 #include <nes_input.h>
+#include <nes_mapper.h>
 
 // Make compiler happy about pure virtual dtors
 nes_input_device::~nes_input_device()
 {}
 namespace
 {
-    template<typename T>
-    void write_scalar(vector<uint8_t> &out, const T &value)
+    template <typename T>
+    void append_state(std::vector<uint8_t> &out, const T &value)
     {
-        const uint8_t *p = reinterpret_cast<const uint8_t *>(&value);
-        out.insert(out.end(), p, p + sizeof(T));
+        auto begin = reinterpret_cast<const uint8_t *>(&value);
+        out.insert(out.end(), begin, begin + sizeof(T));
     }
 
-    template<typename T>
-    bool read_scalar(const uint8_t *&ptr, const uint8_t *end, T &value)
+    template <typename T>
+    bool read_state(const std::vector<uint8_t> &in, size_t &offset, T *value)
     {
-        if (end - ptr < (ptrdiff_t)sizeof(T))
+        if (offset + sizeof(T) > in.size())
             return false;
-        memcpy(&value, ptr, sizeof(T));
-        ptr += sizeof(T);
+
+        memcpy(value, in.data() + offset, sizeof(T));
+        offset += sizeof(T);
         return true;
     }
 }
 
 void nes_input::serialize(vector<uint8_t> &out) const
 {
-    write_scalar(out, _strobe_on);
-    for (int i = 0; i < NES_MAX_PLAYER; ++i)
-    {
-        uint8_t flags = static_cast<uint8_t>(_button_flags[i]);
-        write_scalar(out, flags);
-        write_scalar(out, _button_id[i]);
-    }
+    append_state(out, _strobe_on);
+    out.insert(out.end(), reinterpret_cast<const uint8_t *>(_button_flags), reinterpret_cast<const uint8_t *>(_button_flags) + sizeof(_button_flags));
+    out.insert(out.end(), _button_id, _button_id + sizeof(_button_id));
 }
 
-bool nes_input::deserialize(const uint8_t *&ptr, const uint8_t *end)
+bool nes_input::deserialize(const vector<uint8_t> &in, size_t &offset)
 {
-    if (!read_scalar(ptr, end, _strobe_on))
+    bool ok = read_state(in, offset, &_strobe_on);
+    if (!ok)
         return false;
 
-    for (int i = 0; i < NES_MAX_PLAYER; ++i)
-    {
-        uint8_t flags;
-        if (!read_scalar(ptr, end, flags) || !read_scalar(ptr, end, _button_id[i]))
-            return false;
-        _button_flags[i] = static_cast<nes_button_flags>(flags);
-    }
+    if (offset + sizeof(_button_flags) + sizeof(_button_id) > in.size())
+        return false;
+
+    memcpy(_button_flags, in.data() + offset, sizeof(_button_flags));
+    offset += sizeof(_button_flags);
+    memcpy(_button_id, in.data() + offset, sizeof(_button_id));
+    offset += sizeof(_button_id);
 
     return true;
 }

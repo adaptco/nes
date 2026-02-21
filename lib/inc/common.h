@@ -3,7 +3,6 @@
 #ifdef _MSC_VER
 #else
 #include <cstdlib>
-#include <cerrno>
 #include <cstring>
 
 typedef int errno_t;
