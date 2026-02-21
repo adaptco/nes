@@ -6,6 +6,8 @@
 #include "nes_system.h"
 #include "nes_ppu.h"
 
+#include <array>
+
 using namespace std;
 
 

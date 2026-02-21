@@ -6,6 +6,8 @@
 #include <cstdint>
 #include <vector>
 
+class nes_state_stream;
+
 #define NES_CONTROLLER_STROBE_BIT 0x1
 
 // The controller are reported always in bit 0 in the order of 
@@ -104,31 +106,35 @@ private :
         }
     }
 
-public :
     void write_CONTROLLER(uint8_t val)
     {
         bool prev_strobe = _strobe_on;
         _strobe_on = (val & NES_CONTROLLER_STROBE_BIT);
         if (prev_strobe && !_strobe_on)
         {
-            // if strobe is turned off, reloading one last time
             reload();
         }
     }
 
     uint8_t read_CONTROLLER(uint8_t id)
     {
-        // If strobe bit is on, we'll reload every time which effectively hand out button 0 (A) every single 
-        // time. People would typically pulse the bit and then read the controller I/O register 8(!!) times
         if (_strobe_on)
             reload();
 
-        // present bit 7~0 as bit0 in the returned value (it's a serial port)
-        // 0x40 is from the open bus
         return 0x40 | ((_button_flags[id] >> (7 - _button_id[id]++)) & 0x1);
     }
 
 private :
+    void init()
+    {
+        _strobe_on = false;
+        for (int i = 0; i < NES_MAX_PLAYER; ++i)
+        {
+            _button_flags[i] = nes_button_flags_none;
+            _button_id[i] = 0;
+        }
+    }
+
     void reload()
     {
         for (int i = 0; i < NES_MAX_PLAYER; ++i)
