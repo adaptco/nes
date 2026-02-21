@@ -1,6 +1,7 @@
 #include "stdafx.h"
 
 #include "nes_cpu.h"
+#include "nes_memory.h"
 #include "nes_system.h"
 #include "nes_ppu.h"
 
@@ -97,3 +98,17 @@ void nes_system::step(nes_cycle_t count)
     _ppu->step_to(_master_cycle);
 }
     
+nes_system_snapshot nes_system::snapshot() const
+{
+    nes_system_snapshot out;
+    out.frame_count = _ppu->frame_count();
+    out.frame_buffer = _ppu->frame_buffer();
+    out.frame_width = _ppu->frame_width();
+    out.frame_height = _ppu->frame_height();
+
+    out.cpu_ram = { _ram->cpu_ram(), _ram->cpu_ram_size() };
+    out.ppu_vram = { _ppu->vram(), _ppu->vram_size() };
+    out.ppu_oam = { _ppu->oam(), _ppu->oam_size() };
+
+    return out;
+}

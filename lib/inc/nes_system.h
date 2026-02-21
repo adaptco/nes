@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -13,6 +14,30 @@ class nes_memory;
 class nes_apu;
 class nes_ppu;
 class nes_input;
+
+struct nes_memory_view
+{
+    const uint8_t *data;
+    size_t size;
+};
+
+struct nes_system_snapshot
+{
+    // Frame metadata captured at snapshot creation time.
+    uint32_t frame_count;
+
+    // Completed frame buffer (palette index bytes), width x height bytes.
+    const uint8_t *frame_buffer;
+    uint16_t frame_width;
+    uint16_t frame_height;
+
+    // Physical CPU RAM (2 KB at $0000-$07ff, mirrored by CPU addressing logic).
+    nes_memory_view cpu_ram;
+
+    // PPU VRAM (0x4000 bytes) and sprite OAM (0x100 bytes).
+    nes_memory_view ppu_vram;
+    nes_memory_view ppu_oam;
+};
 
 enum nes_rom_exec_mode
 {
@@ -53,6 +78,14 @@ public :
     nes_memory  *ram()      { return _ram.get();   }
     nes_ppu     *ppu()      { return _ppu.get();   } 
     nes_input   *input()    { return _input.get(); }
+
+    // Returns read-only pointers to emulator memory for embedding extraction.
+    // Snapshot consistency contract:
+    // - frame_buffer points to the completed frame (the back buffer).
+    // - the pointer is flipped by nes_ppu::swap_buffer() at frame boundary.
+    // - for deterministic embeddings, call snapshot() after a frame boundary
+    //   (when frame_count changes) and before additional stepping.
+    nes_system_snapshot snapshot() const;
 
 public :
     //

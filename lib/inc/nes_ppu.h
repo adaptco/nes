@@ -173,6 +173,25 @@ public :
             return _frame_buffer_1;
     }
 
+    const uint8_t *frame_buffer() const
+    {
+        // Return the completed buffer
+        if (_frame_buffer == _frame_buffer_1)
+            return _frame_buffer_2;
+        else
+            return _frame_buffer_1;
+    }
+
+    uint16_t frame_width() const { return PPU_SCREEN_X; }
+    uint16_t frame_height() const { return PPU_SCREEN_Y; }
+    uint32_t frame_count() const { return _frame_count; }
+
+    const uint8_t *vram() const { return _vram.get(); }
+    size_t vram_size() const { return PPU_VRAM_SIZE; }
+
+    const uint8_t *oam() const { return _oam.get(); }
+    size_t oam_size() const { return PPU_OAM_SIZE; }
+
     void swap_buffer()
     {
         if (_frame_buffer == _frame_buffer_1)

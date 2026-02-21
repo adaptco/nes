@@ -92,6 +92,9 @@ public :
 
     nes_mapper& get_mapper() { return *_mapper; }
 
+    const uint8_t *cpu_ram() const { return _ram.data(); }
+    size_t cpu_ram_size() const { return 0x800; }
+
 public :
     //
     // nes_component overrides
