@@ -52,6 +52,31 @@ enum nes_rom_exec_mode
 };
 
 
+struct nes_system_snapshot
+{
+    // Pointer to the latest fully completed frame (palette-index pixels).
+    const uint8_t *frame_buffer;
+    uint16_t frame_width;
+    uint16_t frame_height;
+
+    // CPU RAM (full CPU-visible RAM array).
+    const uint8_t *cpu_ram;
+    size_t cpu_ram_size;
+
+    // PPU memory useful for visual/state embeddings.
+    const uint8_t *ppu_vram;
+    size_t ppu_vram_size;
+
+    const uint8_t *ppu_oam;
+    size_t ppu_oam_size;
+};
+
+struct nes_state_blob
+{
+    vector<uint8_t> data;
+};
+
+
 //
 // The NES system hardware that manages all the invidual components - CPU, PPU, APU, RAM, etc
 // It synchronizes between different components
@@ -59,6 +84,11 @@ enum nes_rom_exec_mode
 class nes_system
 {
 public :
+    struct nes_state
+    {
+        vector<uint8_t> data;
+    };
+
     nes_system();
     ~nes_system();
 
@@ -73,19 +103,27 @@ public :
     void run_rom(const char *rom_path, nes_rom_exec_mode mode);
 
     void load_rom(const char *rom_path, nes_rom_exec_mode mode);
+
+    nes_state serialize() const;
+    bool deserialize(const nes_state &state);
    
     nes_cpu     *cpu()      { return _cpu.get();   }
     nes_memory  *ram()      { return _ram.get();   }
     nes_ppu     *ppu()      { return _ppu.get();   } 
     nes_input   *input()    { return _input.get(); }
 
-    // Returns read-only pointers to emulator memory for embedding extraction.
-    // Snapshot consistency contract:
-    // - frame_buffer points to the completed frame (the back buffer).
-    // - the pointer is flipped by nes_ppu::swap_buffer() at frame boundary.
-    // - for deterministic embeddings, call snapshot() after a frame boundary
-    //   (when frame_count changes) and before additional stepping.
+    // Returns a read-only snapshot view for deterministic embedding extraction.
+    //
+    // Snapshot contract:
+    // - frame_buffer points to the latest fully completed frame only.
+    // - The frame pointer remains stable until the next PPU frame boundary swap.
+    // - PPU swaps buffers at the 261->0 scanline transition (end of frame).
+    // - Callers should sample snapshots at a consistent point in emulation timing for
+    //   reproducible embeddings.
     nes_system_snapshot snapshot() const;
+
+    nes_state_blob serialize() const;
+    bool deserialize(const nes_state_blob &state);
 
 public :
     //

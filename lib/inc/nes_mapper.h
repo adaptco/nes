@@ -1,9 +1,11 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
 #include <nes_trace.h>
 #include <memory>
 #include <fstream>
+#include <cstring>
 
 #include <common.h>
 
@@ -71,6 +73,9 @@ public :
     //
     virtual void write_reg(uint16_t addr, uint8_t val) {};
 
+    virtual void serialize(vector<uint8_t> &out) const {}
+    virtual bool deserialize(const uint8_t *data, size_t size, size_t &offset) { return true; }
+
     virtual ~nes_mapper() {}
 };
 
@@ -108,13 +113,22 @@ public :
         :_prg_rom(prg_rom), _chr_rom(chr_rom), _vertical_mirroring(vertical_mirroring)
     {
         _bit_latch = 0;
+        _reg = 0;
+        _control = 0x0c;
+        _chr_bank_0 = 0;
+        _chr_bank_1 = 0;
+        _prg_bank = 0;
     }
 
     virtual void on_load_ram(nes_memory &mem);
     virtual void on_load_ppu(nes_ppu &ppu);
     virtual void get_info(nes_mapper_info &info);
+    virtual void serialize(vector<uint8_t> &out) const;
+    virtual bool deserialize(const uint8_t *data, size_t size, size_t &offset);
 
     virtual void write_reg(uint16_t addr, uint8_t val);
+    virtual void serialize(vector<uint8_t> &out) const;
+    virtual bool deserialize(const vector<uint8_t> &in, size_t &offset);
 
  private :
     void write_control(uint8_t val);
@@ -134,6 +148,9 @@ private :
     uint8_t _bit_latch;                         // for serial port
     uint8_t _reg;                               // current register being written
     uint8_t _control;                           // control register
+    uint8_t _chr_bank_0;                        // current CHR bank 0 register
+    uint8_t _chr_bank_1;                        // current CHR bank 1 register
+    uint8_t _prg_bank;                          // current PRG bank register
 };
 
 //
@@ -150,13 +167,18 @@ public:
         _prev_prg_mode = 1;
 
         _bank_select = 0;
+        memset(_bank_data, 0, sizeof(_bank_data));
     }
 
     virtual void on_load_ram(nes_memory &mem);
     virtual void on_load_ppu(nes_ppu &ppu);
     virtual void get_info(nes_mapper_info &info);
+    virtual void serialize(vector<uint8_t> &out) const;
+    virtual bool deserialize(const uint8_t *data, size_t size, size_t &offset);
 
     virtual void write_reg(uint16_t addr, uint8_t val);
+    virtual void serialize(vector<uint8_t> &out) const;
+    virtual bool deserialize(const vector<uint8_t> &in, size_t &offset);
 
 private:
     void write_bank_select(uint8_t val);
@@ -178,6 +200,7 @@ private:
 
     uint8_t _bank_select;                       // control register
     uint8_t _prev_prg_mode;                     // previous prg mode
+    uint8_t _bank_data[8];                      // bank data registers
 };
 
 #define FLAG_6_USE_VERTICAL_MIRRORING_MASK 0x1
