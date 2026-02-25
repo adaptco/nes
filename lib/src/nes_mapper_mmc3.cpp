@@ -261,10 +261,10 @@ bool nes_mapper_mmc3::deserialize(const vector<uint8_t> &in, size_t &offset)
         return false;
     }
 
-    if (offset + 8 > in.size())
+    if (offset + sizeof(_bank_data) > in.size())
         return false;
-    memcpy(_bank_data, in.data() + offset, 8);
-    offset += 8;
+    memcpy(_bank_data, in.data() + offset, sizeof(_bank_data));
+    offset += sizeof(_bank_data);
 
     write_mirroring(_vertical_mirroring ? 0 : 1);
     for (int i = 0; i < 8; ++i)
