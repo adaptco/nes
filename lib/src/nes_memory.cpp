@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include <cstring>
 
 void nes_memory::power_on(nes_system *system)
 {
@@ -72,4 +73,42 @@ void nes_memory::set_byte(uint16_t addr, uint8_t val)
     }
 
     _ram[addr] = val;
+}
+namespace {
+template<typename T>
+void nes_state_write_mem(vector<uint8_t> &out, const T &v)
+{
+    const uint8_t *p = reinterpret_cast<const uint8_t*>(&v);
+    out.insert(out.end(), p, p + sizeof(T));
+}
+
+template<typename T>
+bool nes_state_read_mem(const vector<uint8_t> &in, size_t &offset, T &v)
+{
+    if (offset + sizeof(T) > in.size())
+        return false;
+    memcpy(&v, in.data() + offset, sizeof(T));
+    offset += sizeof(T);
+    return true;
+}
+}
+
+void nes_memory::serialize(vector<uint8_t> &out) const
+{
+    uint32_t size = static_cast<uint32_t>(_ram.size());
+    nes_state_write_mem(out, size);
+    out.insert(out.end(), _ram.begin(), _ram.end());
+}
+
+bool nes_memory::deserialize(const vector<uint8_t> &in, size_t &offset)
+{
+    uint32_t size = 0;
+    if (!nes_state_read_mem(in, offset, size))
+        return false;
+    if (size != _ram.size() || offset + size > in.size())
+        return false;
+
+    memcpy(_ram.data(), in.data() + offset, size);
+    offset += size;
+    return true;
 }

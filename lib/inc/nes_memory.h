@@ -91,6 +91,10 @@ public :
     void load_mapper(shared_ptr<nes_mapper> &mapper);
 
     nes_mapper& get_mapper() { return *_mapper; }
+    bool has_mapper() const { return _mapper != nullptr; }
+
+    void serialize(vector<uint8_t> &out) const;
+    bool deserialize(const vector<uint8_t> &in, size_t &offset);
 
 public :
     //

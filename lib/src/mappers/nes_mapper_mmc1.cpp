@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include <cstring>
 
 //
 // Called when mapper is loaded into memory
@@ -102,6 +103,7 @@ MMC1 can do CHR banking in 4KB chunks. Known carts with CHR RAM have 8 KiB, so t
 */
 void nes_mapper_mmc1::write_chr_bank_0(uint8_t val)
 {
+    _chr_bank_0 = val;
     uint32_t addr;
     uint16_t size;
     if (_control & 0x10)
@@ -133,6 +135,7 @@ CCCCC
 */
 void nes_mapper_mmc1::write_chr_bank_1(uint8_t val)
 {
+    _chr_bank_1 = val;
     if (_control & 0x10)
     {
         // 4KB mode only
@@ -157,6 +160,7 @@ RPPPP
 */
 void nes_mapper_mmc1::write_prg_bank(uint8_t val)
 {
+    _prg_bank = val;
     if (_control & 0x8)
     {
         // 16KB mode
@@ -178,4 +182,54 @@ void nes_mapper_mmc1::write_prg_bank(uint8_t val)
         // 32KB mode at $8000
         _mem->set_bytes(0x8000, _prg_rom->data() + (val & 0xe) * 0x4000, 0x8000);
     }
+}
+
+namespace {
+template<typename T>
+void nes_state_write_mmc1(vector<uint8_t> &out, const T &v)
+{
+    const uint8_t *p = reinterpret_cast<const uint8_t*>(&v);
+    out.insert(out.end(), p, p + sizeof(T));
+}
+
+template<typename T>
+bool nes_state_read_mmc1(const vector<uint8_t> &in, size_t &offset, T &v)
+{
+    if (offset + sizeof(T) > in.size())
+        return false;
+    memcpy(&v, in.data() + offset, sizeof(T));
+    offset += sizeof(T);
+    return true;
+}
+}
+
+void nes_mapper_mmc1::serialize(vector<uint8_t> &out) const
+{
+    nes_state_write_mmc1(out, _vertical_mirroring);
+    nes_state_write_mmc1(out, _bit_latch);
+    nes_state_write_mmc1(out, _reg);
+    nes_state_write_mmc1(out, _control);
+    nes_state_write_mmc1(out, _chr_bank_0);
+    nes_state_write_mmc1(out, _chr_bank_1);
+    nes_state_write_mmc1(out, _prg_bank);
+}
+
+bool nes_mapper_mmc1::deserialize(const vector<uint8_t> &in, size_t &offset)
+{
+    if (!nes_state_read_mmc1(in, offset, _vertical_mirroring) ||
+        !nes_state_read_mmc1(in, offset, _bit_latch) ||
+        !nes_state_read_mmc1(in, offset, _reg) ||
+        !nes_state_read_mmc1(in, offset, _control) ||
+        !nes_state_read_mmc1(in, offset, _chr_bank_0) ||
+        !nes_state_read_mmc1(in, offset, _chr_bank_1) ||
+        !nes_state_read_mmc1(in, offset, _prg_bank))
+    {
+        return false;
+    }
+
+    write_control(_control);
+    write_chr_bank_0(_chr_bank_0);
+    write_chr_bank_1(_chr_bank_1);
+    write_prg_bank(_prg_bank);
+    return true;
 }

@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include <cstring>
 #include "nes_cpu.h"
 #include "nes_system.h"
 #include "nes_trace.h"
@@ -1540,3 +1541,47 @@ void nes_cpu::XAA(nes_addr_mode addr_mode) { assert(false); }
 void nes_cpu::AHX(nes_addr_mode addr_mode) { assert(false); }
 void nes_cpu::TAS(nes_addr_mode addr_mode) { assert(false); }
 void nes_cpu::LAS(nes_addr_mode addr_mode) { assert(false); }
+namespace {
+template<typename T>
+void nes_state_write_cpu(vector<uint8_t> &out, const T &v)
+{
+    const uint8_t *p = reinterpret_cast<const uint8_t*>(&v);
+    out.insert(out.end(), p, p + sizeof(T));
+}
+
+template<typename T>
+bool nes_state_read_cpu(const vector<uint8_t> &in, size_t &offset, T &v)
+{
+    if (offset + sizeof(T) > in.size())
+        return false;
+    memcpy(&v, in.data() + offset, sizeof(T));
+    offset += sizeof(T);
+    return true;
+}
+}
+
+void nes_cpu::serialize(vector<uint8_t> &out) const
+{
+    nes_state_write_cpu(out, _context);
+    auto cycle = _cycle.count();
+    nes_state_write_cpu(out, cycle);
+    nes_state_write_cpu(out, _nmi_pending);
+    nes_state_write_cpu(out, _dma_pending);
+    nes_state_write_cpu(out, _dma_addr);
+}
+
+bool nes_cpu::deserialize(const vector<uint8_t> &in, size_t &offset)
+{
+    int64_t cycle = 0;
+    if (!nes_state_read_cpu(in, offset, _context) ||
+        !nes_state_read_cpu(in, offset, cycle) ||
+        !nes_state_read_cpu(in, offset, _nmi_pending) ||
+        !nes_state_read_cpu(in, offset, _dma_pending) ||
+        !nes_state_read_cpu(in, offset, _dma_addr))
+    {
+        return false;
+    }
+
+    _cycle = nes_cycle_t(cycle);
+    return true;
+}

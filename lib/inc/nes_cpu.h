@@ -152,6 +152,9 @@ public :
     void request_nmi() { _nmi_pending = true; };
     void request_dma(uint16_t addr) { _dma_pending = true; _dma_addr = addr; }
 
+    void serialize(vector<uint8_t> &out) const;
+    bool deserialize(const vector<uint8_t> &in, size_t &offset);
+
 public :
     //
     // Stack operations

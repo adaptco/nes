@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include <cstring>
 
 #include "nes_cpu.h"
 #include "nes_system.h"
@@ -97,3 +98,95 @@ void nes_system::step(nes_cycle_t count)
     _ppu->step_to(_master_cycle);
 }
     
+namespace {
+constexpr uint32_t NES_STATE_MAGIC = 0x3153454E; // 'NES1'
+constexpr uint32_t NES_STATE_VERSION = 1;
+
+template<typename T>
+void nes_state_write_sys(vector<uint8_t> &out, const T &v)
+{
+    const uint8_t *p = reinterpret_cast<const uint8_t*>(&v);
+    out.insert(out.end(), p, p + sizeof(T));
+}
+
+template<typename T>
+bool nes_state_read_sys(const vector<uint8_t> &in, size_t &offset, T &v)
+{
+    if (offset + sizeof(T) > in.size())
+        return false;
+    memcpy(&v, in.data() + offset, sizeof(T));
+    offset += sizeof(T);
+    return true;
+}
+}
+
+nes_state_blob nes_system::serialize() const
+{
+    nes_state_blob state;
+    auto &out = state.bytes;
+
+    nes_state_write_sys(out, NES_STATE_MAGIC);
+    nes_state_write_sys(out, NES_STATE_VERSION);
+
+    auto master_cycle = _master_cycle.count();
+    nes_state_write_sys(out, master_cycle);
+    nes_state_write_sys(out, _stop_requested);
+
+    _cpu->serialize(out);
+    _ram->serialize(out);
+    _ppu->serialize(out);
+    _input->serialize(out);
+
+    bool has_mapper = _ram->has_mapper();
+    nes_state_write_sys(out, has_mapper);
+    if (has_mapper)
+        _ram->get_mapper().serialize(out);
+
+    return state;
+}
+
+bool nes_system::deserialize(const nes_state_blob &state)
+{
+    size_t offset = 0;
+    const auto &in = state.bytes;
+
+    uint32_t magic = 0;
+    uint32_t version = 0;
+    int64_t master_cycle = 0;
+
+    if (!nes_state_read_sys(in, offset, magic) ||
+        !nes_state_read_sys(in, offset, version) ||
+        magic != NES_STATE_MAGIC ||
+        version != NES_STATE_VERSION ||
+        !nes_state_read_sys(in, offset, master_cycle) ||
+        !nes_state_read_sys(in, offset, _stop_requested))
+    {
+        return false;
+    }
+
+    if (!_cpu->deserialize(in, offset) ||
+        !_ram->deserialize(in, offset) ||
+        !_ppu->deserialize(in, offset) ||
+        !_input->deserialize(in, offset))
+    {
+        return false;
+    }
+
+    bool has_mapper = false;
+    if (!nes_state_read_sys(in, offset, has_mapper))
+        return false;
+
+    if (has_mapper)
+    {
+        if (!_ram->has_mapper())
+            return false;
+        if (!_ram->get_mapper().deserialize(in, offset))
+            return false;
+    }
+
+    if (offset != in.size())
+        return false;
+
+    _master_cycle = nes_cycle_t(master_cycle);
+    return true;
+}

@@ -14,6 +14,11 @@ class nes_apu;
 class nes_ppu;
 class nes_input;
 
+struct nes_state_blob
+{
+    vector<uint8_t> bytes;
+};
+
 enum nes_rom_exec_mode
 {
     // Run the PRG ROM directly - useful for ROM-based automation test path
@@ -53,6 +58,9 @@ public :
     nes_memory  *ram()      { return _ram.get();   }
     nes_ppu     *ppu()      { return _ppu.get();   } 
     nes_input   *input()    { return _input.get(); }
+
+    nes_state_blob serialize() const;
+    bool deserialize(const nes_state_blob &state);
 
 public :
     //

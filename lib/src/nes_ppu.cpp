@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include <cstring>
 
 #include "nes_ppu.h"
 #include "nes_system.h"
@@ -574,4 +575,157 @@ void nes_ppu::step_ppu(nes_ppu_cycle_t count)
         }
         NES_TRACE4("[NES_PPU] SCANLINE " << std::dec << (uint32_t) _cur_scanline << " ------ ");
     }
+}
+namespace {
+template<typename T>
+void nes_state_write_ppu(vector<uint8_t> &out, const T &v)
+{
+    const uint8_t *p = reinterpret_cast<const uint8_t*>(&v);
+    out.insert(out.end(), p, p + sizeof(T));
+}
+
+template<typename T>
+bool nes_state_read_ppu(const vector<uint8_t> &in, size_t &offset, T &v)
+{
+    if (offset + sizeof(T) > in.size())
+        return false;
+    memcpy(&v, in.data() + offset, sizeof(T));
+    offset += sizeof(T);
+    return true;
+}
+
+bool nes_state_read_bytes_ppu(const vector<uint8_t> &in, size_t &offset, uint8_t *dest, size_t size)
+{
+    if (offset + size > in.size())
+        return false;
+    memcpy(dest, in.data() + offset, size);
+    offset += size;
+    return true;
+}
+}
+
+void nes_ppu::serialize(vector<uint8_t> &out) const
+{
+    nes_state_write_ppu(out, _name_tbl_addr);
+    nes_state_write_ppu(out, _bg_pattern_tbl_addr);
+    nes_state_write_ppu(out, _sprite_pattern_tbl_addr);
+    nes_state_write_ppu(out, _ppu_addr_inc);
+    nes_state_write_ppu(out, _vblank_nmi);
+    nes_state_write_ppu(out, _use_8x16_sprite);
+    nes_state_write_ppu(out, _sprite_height);
+
+    nes_state_write_ppu(out, _show_bg);
+    nes_state_write_ppu(out, _show_sprites);
+    nes_state_write_ppu(out, _gray_scale_mode);
+
+    nes_state_write_ppu(out, _latch);
+    nes_state_write_ppu(out, _sprite_overflow);
+    nes_state_write_ppu(out, _vblank_started);
+    nes_state_write_ppu(out, _sprite_0_hit);
+    nes_state_write_ppu(out, _oam_addr);
+    nes_state_write_ppu(out, _addr_toggle);
+    nes_state_write_ppu(out, _ppu_addr);
+    nes_state_write_ppu(out, _temp_ppu_addr);
+    nes_state_write_ppu(out, _fine_x_scroll);
+    nes_state_write_ppu(out, _scroll_y);
+    nes_state_write_ppu(out, _vram_read_buf);
+
+    auto master_cycle = _master_cycle.count();
+    auto scanline_cycle = _scanline_cycle.count();
+    nes_state_write_ppu(out, master_cycle);
+    nes_state_write_ppu(out, scanline_cycle);
+    nes_state_write_ppu(out, _cur_scanline);
+    nes_state_write_ppu(out, _frame_count);
+    nes_state_write_ppu(out, _protect_register);
+    nes_state_write_ppu(out, _stop_after_frame);
+    nes_state_write_ppu(out, _auto_stop);
+
+    nes_state_write_ppu(out, _tile_index);
+    nes_state_write_ppu(out, _tile_palette_bit32);
+    nes_state_write_ppu(out, _bitplane0);
+    out.insert(out.end(), _pixel_cycle, _pixel_cycle + sizeof(_pixel_cycle));
+    nes_state_write_ppu(out, _shift_reg);
+    nes_state_write_ppu(out, _x_offset);
+
+    out.insert(out.end(), _frame_buffer_1, _frame_buffer_1 + sizeof(_frame_buffer_1));
+    out.insert(out.end(), _frame_buffer_2, _frame_buffer_2 + sizeof(_frame_buffer_2));
+    out.insert(out.end(), _frame_buffer_bg, _frame_buffer_bg + sizeof(_frame_buffer_bg));
+    uint8_t frame_buffer_id = (_frame_buffer == _frame_buffer_2) ? 2 : 1;
+    nes_state_write_ppu(out, frame_buffer_id);
+
+    nes_state_write_ppu(out, _last_sprite_id);
+    nes_state_write_ppu(out, _has_sprite_0);
+    nes_state_write_ppu(out, _mask_oam_read);
+    nes_state_write_ppu(out, _sprite_pos_y);
+    out.insert(out.end(), reinterpret_cast<const uint8_t*>(_sprite_buf), reinterpret_cast<const uint8_t*>(_sprite_buf) + sizeof(_sprite_buf));
+
+    out.insert(out.end(), _vram.get(), _vram.get() + PPU_VRAM_SIZE);
+    out.insert(out.end(), _oam.get(), _oam.get() + PPU_OAM_SIZE);
+
+    uint16_t mirroring_flags = static_cast<uint16_t>(_mirroring_flags);
+    nes_state_write_ppu(out, mirroring_flags);
+}
+
+bool nes_ppu::deserialize(const vector<uint8_t> &in, size_t &offset)
+{
+    int64_t master_cycle = 0;
+    int64_t scanline_cycle = 0;
+    uint8_t frame_buffer_id = 1;
+    uint16_t mirroring_flags = 0;
+
+    if (!nes_state_read_ppu(in, offset, _name_tbl_addr) ||
+        !nes_state_read_ppu(in, offset, _bg_pattern_tbl_addr) ||
+        !nes_state_read_ppu(in, offset, _sprite_pattern_tbl_addr) ||
+        !nes_state_read_ppu(in, offset, _ppu_addr_inc) ||
+        !nes_state_read_ppu(in, offset, _vblank_nmi) ||
+        !nes_state_read_ppu(in, offset, _use_8x16_sprite) ||
+        !nes_state_read_ppu(in, offset, _sprite_height) ||
+        !nes_state_read_ppu(in, offset, _show_bg) ||
+        !nes_state_read_ppu(in, offset, _show_sprites) ||
+        !nes_state_read_ppu(in, offset, _gray_scale_mode) ||
+        !nes_state_read_ppu(in, offset, _latch) ||
+        !nes_state_read_ppu(in, offset, _sprite_overflow) ||
+        !nes_state_read_ppu(in, offset, _vblank_started) ||
+        !nes_state_read_ppu(in, offset, _sprite_0_hit) ||
+        !nes_state_read_ppu(in, offset, _oam_addr) ||
+        !nes_state_read_ppu(in, offset, _addr_toggle) ||
+        !nes_state_read_ppu(in, offset, _ppu_addr) ||
+        !nes_state_read_ppu(in, offset, _temp_ppu_addr) ||
+        !nes_state_read_ppu(in, offset, _fine_x_scroll) ||
+        !nes_state_read_ppu(in, offset, _scroll_y) ||
+        !nes_state_read_ppu(in, offset, _vram_read_buf) ||
+        !nes_state_read_ppu(in, offset, master_cycle) ||
+        !nes_state_read_ppu(in, offset, scanline_cycle) ||
+        !nes_state_read_ppu(in, offset, _cur_scanline) ||
+        !nes_state_read_ppu(in, offset, _frame_count) ||
+        !nes_state_read_ppu(in, offset, _protect_register) ||
+        !nes_state_read_ppu(in, offset, _stop_after_frame) ||
+        !nes_state_read_ppu(in, offset, _auto_stop) ||
+        !nes_state_read_ppu(in, offset, _tile_index) ||
+        !nes_state_read_ppu(in, offset, _tile_palette_bit32) ||
+        !nes_state_read_ppu(in, offset, _bitplane0) ||
+        !nes_state_read_bytes_ppu(in, offset, _pixel_cycle, sizeof(_pixel_cycle)) ||
+        !nes_state_read_ppu(in, offset, _shift_reg) ||
+        !nes_state_read_ppu(in, offset, _x_offset) ||
+        !nes_state_read_bytes_ppu(in, offset, _frame_buffer_1, sizeof(_frame_buffer_1)) ||
+        !nes_state_read_bytes_ppu(in, offset, _frame_buffer_2, sizeof(_frame_buffer_2)) ||
+        !nes_state_read_bytes_ppu(in, offset, _frame_buffer_bg, sizeof(_frame_buffer_bg)) ||
+        !nes_state_read_ppu(in, offset, frame_buffer_id) ||
+        !nes_state_read_ppu(in, offset, _last_sprite_id) ||
+        !nes_state_read_ppu(in, offset, _has_sprite_0) ||
+        !nes_state_read_ppu(in, offset, _mask_oam_read) ||
+        !nes_state_read_ppu(in, offset, _sprite_pos_y) ||
+        !nes_state_read_bytes_ppu(in, offset, reinterpret_cast<uint8_t*>(_sprite_buf), sizeof(_sprite_buf)) ||
+        !nes_state_read_bytes_ppu(in, offset, _vram.get(), PPU_VRAM_SIZE) ||
+        !nes_state_read_bytes_ppu(in, offset, _oam.get(), PPU_OAM_SIZE) ||
+        !nes_state_read_ppu(in, offset, mirroring_flags))
+    {
+        return false;
+    }
+
+    _master_cycle = nes_cycle_t(master_cycle);
+    _scanline_cycle = nes_cycle_t(scanline_cycle);
+    _frame_buffer = (frame_buffer_id == 2) ? _frame_buffer_2 : _frame_buffer_1;
+    _mirroring_flags = static_cast<nes_mapper_flags>(mirroring_flags);
+    return true;
 }
