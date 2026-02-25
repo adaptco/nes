@@ -191,11 +191,11 @@ bool nes_system::deserialize(const nes_state_blob &state)
     if (mapper_id != mapper.mapper_id())
         return false;
 
-    size_t mapper_offset = offset;
-    if (!mapper.deserialize(data, offset + mapper_size, mapper_offset))
+    size_t mapper_end = offset + mapper_size;
+    if (!mapper.deserialize(data, mapper_end, offset) || offset != mapper_end)
+    {
         return false;
-    if (mapper_offset != offset + mapper_size)
-        return false;
+    }
 
     _master_cycle = nes_cycle_t(master_cycle);
     _stop_requested = (stop_requested != 0);
