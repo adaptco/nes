@@ -1,6 +1,30 @@
 #include "stdafx.h"
 #include <cstring>
 
+namespace
+{
+    template<typename T>
+    void write_value(vector<uint8_t> &out, T value)
+    {
+        for (size_t i = 0; i < sizeof(T); ++i)
+            out.push_back(uint8_t((uint64_t(value) >> (i * 8)) & 0xff));
+    }
+
+    template<typename T>
+    bool read_value(const uint8_t *data, size_t size, size_t &offset, T &value)
+    {
+        if (offset + sizeof(T) > size)
+            return false;
+
+        uint64_t v = 0;
+        for (size_t i = 0; i < sizeof(T); ++i)
+            v |= uint64_t(data[offset++]) << (i * 8);
+
+        value = T(v);
+        return true;
+    }
+}
+
 //
 // Called when mapper is loaded into memory
 // Useful when all you need is a one-time memcpy
@@ -39,6 +63,32 @@ void nes_mapper_mmc1::get_info(nes_mapper_info &info)
     info.flags = nes_mapper_flags_has_registers;
     if (_vertical_mirroring)
         info.flags = nes_mapper_flags(info.flags | nes_mapper_flags_vertical_mirroring);
+}
+
+
+
+void nes_mapper_mmc1::serialize(vector<uint8_t> &out) const
+{
+    out.push_back(_bit_latch);
+    out.push_back(_reg);
+    out.push_back(_control);
+    out.push_back(_vertical_mirroring ? 1 : 0);
+}
+
+bool nes_mapper_mmc1::deserialize(const uint8_t *data, size_t size, size_t &offset)
+{
+    if (offset + 4 > size)
+        return false;
+
+    _bit_latch = data[offset++];
+    _reg = data[offset++];
+    _control = data[offset++];
+    _vertical_mirroring = data[offset++] != 0;
+
+    if (_ppu)
+        _ppu->set_mirroring(nes_mapper_flags(_control & nes_mapper_flags_mirroring_mask));
+
+    return true;
 }
 
 void nes_mapper_mmc1::write_reg(uint16_t addr, uint8_t val) 
@@ -184,48 +234,51 @@ void nes_mapper_mmc1::write_prg_bank(uint8_t val)
     }
 }
 
-namespace {
-template<typename T>
-void nes_state_write_mmc1(vector<uint8_t> &out, const T &v)
+namespace
 {
-    const uint8_t *p = reinterpret_cast<const uint8_t*>(&v);
-    out.insert(out.end(), p, p + sizeof(T));
-}
+    template <typename T>
+    void append_state(std::vector<uint8_t> &out, const T &value)
+    {
+        auto begin = reinterpret_cast<const uint8_t *>(&value);
+        out.insert(out.end(), begin, begin + sizeof(T));
+    }
 
-template<typename T>
-bool nes_state_read_mmc1(const vector<uint8_t> &in, size_t &offset, T &v)
-{
-    if (offset + sizeof(T) > in.size())
-        return false;
-    memcpy(&v, in.data() + offset, sizeof(T));
-    offset += sizeof(T);
-    return true;
-}
+    template <typename T>
+    bool read_state(const std::vector<uint8_t> &in, size_t &offset, T *value)
+    {
+        if (offset + sizeof(T) > in.size())
+            return false;
+
+        memcpy(value, in.data() + offset, sizeof(T));
+        offset += sizeof(T);
+        return true;
+    }
 }
 
 void nes_mapper_mmc1::serialize(vector<uint8_t> &out) const
 {
-    nes_state_write_mmc1(out, _vertical_mirroring);
-    nes_state_write_mmc1(out, _bit_latch);
-    nes_state_write_mmc1(out, _reg);
-    nes_state_write_mmc1(out, _control);
-    nes_state_write_mmc1(out, _chr_bank_0);
-    nes_state_write_mmc1(out, _chr_bank_1);
-    nes_state_write_mmc1(out, _prg_bank);
+    append_state(out, _vertical_mirroring);
+    append_state(out, _bit_latch);
+    append_state(out, _reg);
+    append_state(out, _control);
+    append_state(out, _chr_bank_0);
+    append_state(out, _chr_bank_1);
+    append_state(out, _prg_bank);
 }
 
 bool nes_mapper_mmc1::deserialize(const vector<uint8_t> &in, size_t &offset)
 {
-    if (!nes_state_read_mmc1(in, offset, _vertical_mirroring) ||
-        !nes_state_read_mmc1(in, offset, _bit_latch) ||
-        !nes_state_read_mmc1(in, offset, _reg) ||
-        !nes_state_read_mmc1(in, offset, _control) ||
-        !nes_state_read_mmc1(in, offset, _chr_bank_0) ||
-        !nes_state_read_mmc1(in, offset, _chr_bank_1) ||
-        !nes_state_read_mmc1(in, offset, _prg_bank))
-    {
+    bool ok =
+        read_state(in, offset, &_vertical_mirroring) &&
+        read_state(in, offset, &_bit_latch) &&
+        read_state(in, offset, &_reg) &&
+        read_state(in, offset, &_control) &&
+        read_state(in, offset, &_chr_bank_0) &&
+        read_state(in, offset, &_chr_bank_1) &&
+        read_state(in, offset, &_prg_bank);
+
+    if (!ok)
         return false;
-    }
 
     write_control(_control);
     write_chr_bank_0(_chr_bank_0);

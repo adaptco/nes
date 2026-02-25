@@ -164,11 +164,20 @@ public :
     void load_mapper(shared_ptr<nes_mapper> &mapper);
 
     void serialize(vector<uint8_t> &out) const;
-    bool deserialize(const vector<uint8_t> &in, size_t &offset);
+    bool deserialize(const uint8_t *data, size_t size, size_t &offset);
 
     void set_mirroring(nes_mapper_flags flags);
 
-    uint8_t *frame_buffer()
+    void serialize(vector<uint8_t> &out) const;
+    bool deserialize(const uint8_t *data, size_t size, size_t &offset);
+
+    // Returns the latest fully rendered frame buffer (double-buffered read buffer).
+    // Contract:
+    // - This pointer always points to the completed frame.
+    // - It remains stable until the next frame boundary when swap_buffer() is called.
+    // - swap_buffer() is triggered when the PPU wraps from scanline 261 to 0.
+    // - Returned pixels are NES palette indices (not expanded RGB).
+    const uint8_t *frame_buffer() const
     {
         // Return the completed buffer
         if (_frame_buffer == _frame_buffer_1)
@@ -176,6 +185,21 @@ public :
         else
             return _frame_buffer_1;
     }
+
+    uint8_t *frame_buffer()
+    {
+        return const_cast<uint8_t *>(static_cast<const nes_ppu *>(this)->frame_buffer());
+    }
+
+    uint16_t frame_width() const { return PPU_SCREEN_X; }
+    uint16_t frame_height() const { return PPU_SCREEN_Y; }
+    size_t frame_size() const { return size_t(PPU_SCREEN_X) * size_t(PPU_SCREEN_Y); }
+
+    const uint8_t *vram() const { return _vram.get(); }
+    size_t vram_size() const { return PPU_VRAM_SIZE; }
+
+    const uint8_t *oam() const { return _oam.get(); }
+    size_t oam_size() const { return PPU_OAM_SIZE; }
 
     void swap_buffer()
     {
@@ -449,6 +473,9 @@ public :
     void write_OAMDMA(uint8_t val);
 
     void oam_dma(uint16_t addr);
+
+    void serialize(vector<uint8_t> &out) const;
+    bool deserialize(const vector<uint8_t> &in, size_t &offset);
 
 private :
     struct sprite_info

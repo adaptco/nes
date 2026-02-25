@@ -1,6 +1,30 @@
 #include "stdafx.h"
 #include <cstring>
 
+namespace
+{
+    template<typename T>
+    void write_value(vector<uint8_t> &out, T value)
+    {
+        for (size_t i = 0; i < sizeof(T); ++i)
+            out.push_back(uint8_t((uint64_t(value) >> (i * 8)) & 0xff));
+    }
+
+    template<typename T>
+    bool read_value(const uint8_t *data, size_t size, size_t &offset, T &value)
+    {
+        if (offset + sizeof(T) > size)
+            return false;
+
+        uint64_t v = 0;
+        for (size_t i = 0; i < sizeof(T); ++i)
+            v |= uint64_t(data[offset++]) << (i * 8);
+
+        value = T(v);
+        return true;
+    }
+}
+
 //
 // Called when mapper is loaded into memory
 // Useful when all you need is a one-time memcpy
@@ -37,6 +61,30 @@ void nes_mapper_mmc3::get_info(nes_mapper_info &info)
     info.flags = nes_mapper_flags_has_registers;
     if (_vertical_mirroring)
         info.flags = nes_mapper_flags(info.flags | nes_mapper_flags_vertical_mirroring);
+}
+
+
+
+void nes_mapper_mmc3::serialize(vector<uint8_t> &out) const
+{
+    out.push_back(_bank_select);
+    out.push_back(_prev_prg_mode);
+    out.push_back(_vertical_mirroring ? 1 : 0);
+}
+
+bool nes_mapper_mmc3::deserialize(const uint8_t *data, size_t size, size_t &offset)
+{
+    if (offset + 3 > size)
+        return false;
+
+    _bank_select = data[offset++];
+    _prev_prg_mode = data[offset++];
+    _vertical_mirroring = data[offset++] != 0;
+
+    if (_ppu)
+        _ppu->set_mirroring(nes_mapper_flags(_vertical_mirroring ? nes_mapper_flags_vertical_mirroring : nes_mapper_flags_horizontal_mirroring));
+
+    return true;
 }
 
 void nes_mapper_mmc3::write_reg(uint16_t addr, uint8_t val)
@@ -225,53 +273,61 @@ void nes_mapper_mmc3::write_bank_data(uint8_t val)
 
 
 
-namespace {
-template<typename T>
-void nes_state_write_mmc3(vector<uint8_t> &out, const T &v)
+namespace
 {
-    const uint8_t *p = reinterpret_cast<const uint8_t*>(&v);
-    out.insert(out.end(), p, p + sizeof(T));
-}
+    template <typename T>
+    void append_state(std::vector<uint8_t> &out, const T &value)
+    {
+        auto begin = reinterpret_cast<const uint8_t *>(&value);
+        out.insert(out.end(), begin, begin + sizeof(T));
+    }
 
-template<typename T>
-bool nes_state_read_mmc3(const vector<uint8_t> &in, size_t &offset, T &v)
-{
-    if (offset + sizeof(T) > in.size())
-        return false;
-    memcpy(&v, in.data() + offset, sizeof(T));
-    offset += sizeof(T);
-    return true;
-}
+    template <typename T>
+    bool read_state(const std::vector<uint8_t> &in, size_t &offset, T *value)
+    {
+        if (offset + sizeof(T) > in.size())
+            return false;
+
+        memcpy(value, in.data() + offset, sizeof(T));
+        offset += sizeof(T);
+        return true;
+    }
 }
 
 void nes_mapper_mmc3::serialize(vector<uint8_t> &out) const
 {
-    nes_state_write_mmc3(out, _vertical_mirroring);
-    nes_state_write_mmc3(out, _bank_select);
-    nes_state_write_mmc3(out, _prev_prg_mode);
-    out.insert(out.end(), _bank_data, _bank_data + 8);
+    append_state(out, _vertical_mirroring);
+    append_state(out, _bank_select);
+    append_state(out, _prev_prg_mode);
+    out.insert(out.end(), _bank_data, _bank_data + sizeof(_bank_data));
 }
 
 bool nes_mapper_mmc3::deserialize(const vector<uint8_t> &in, size_t &offset)
 {
-    if (!nes_state_read_mmc3(in, offset, _vertical_mirroring) ||
-        !nes_state_read_mmc3(in, offset, _bank_select) ||
-        !nes_state_read_mmc3(in, offset, _prev_prg_mode))
-    {
+    bool ok =
+        read_state(in, offset, &_vertical_mirroring) &&
+        read_state(in, offset, &_bank_select) &&
+        read_state(in, offset, &_prev_prg_mode);
+
+    if (!ok)
         return false;
-    }
 
     if (offset + sizeof(_bank_data) > in.size())
         return false;
+
     memcpy(_bank_data, in.data() + offset, sizeof(_bank_data));
     offset += sizeof(_bank_data);
 
-    write_mirroring(_vertical_mirroring ? 0 : 1);
-    for (int i = 0; i < 8; ++i)
+    _ppu->set_mirroring(nes_mapper_flags(_vertical_mirroring ? nes_mapper_flags_vertical_mirroring : nes_mapper_flags_horizontal_mirroring));
+
+    uint8_t saved_select = _bank_select;
+    _prev_prg_mode = 1;
+    for (uint8_t i = 0; i < 8; ++i)
     {
-        _bank_select = (_bank_select & 0xC0) | i;
+        _bank_select = (_bank_select & 0xf8) | i;
         write_bank_data(_bank_data[i]);
     }
+    _bank_select = saved_select;
 
     return true;
 }
