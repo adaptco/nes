@@ -5,6 +5,30 @@
 #include "nes_system.h"
 #include "nes_memory.h"
 
+namespace
+{
+    template<typename T>
+    void write_value(vector<uint8_t> &out, T value)
+    {
+        for (size_t i = 0; i < sizeof(T); ++i)
+            out.push_back(uint8_t((uint64_t(value) >> (i * 8)) & 0xff));
+    }
+
+    template<typename T>
+    bool read_value(const uint8_t *data, size_t size, size_t &offset, T &value)
+    {
+        if (offset + sizeof(T) > size)
+            return false;
+
+        uint64_t v = 0;
+        for (size_t i = 0; i < sizeof(T); ++i)
+            v |= uint64_t(data[offset++]) << (i * 8);
+
+        value = T(v);
+        return true;
+    }
+}
+
 nes_ppu_protect::nes_ppu_protect(nes_ppu *ppu)
 {
     _ppu = ppu;
@@ -205,6 +229,129 @@ void nes_ppu::power_on(nes_system *system)
     _system = system;
 
     NES_TRACE3("[NES_PPU] SCANLINE " << std::dec << _cur_scanline << " ------ ");
+}
+
+void nes_ppu::serialize(vector<uint8_t> &out) const
+{
+    write_value(out, uint32_t(PPU_VRAM_SIZE));
+    out.insert(out.end(), _vram.get(), _vram.get() + PPU_VRAM_SIZE);
+    write_value(out, uint32_t(PPU_OAM_SIZE));
+    out.insert(out.end(), _oam.get(), _oam.get() + PPU_OAM_SIZE);
+
+    write_value(out, _name_tbl_addr);
+    write_value(out, _bg_pattern_tbl_addr);
+    write_value(out, _sprite_pattern_tbl_addr);
+    write_value(out, _ppu_addr_inc);
+    write_value(out, uint8_t(_vblank_nmi));
+    write_value(out, uint8_t(_use_8x16_sprite));
+    write_value(out, _sprite_height);
+    write_value(out, uint8_t(_show_bg));
+    write_value(out, uint8_t(_show_sprites));
+    write_value(out, uint8_t(_gray_scale_mode));
+    write_value(out, _latch);
+    write_value(out, uint8_t(_sprite_overflow));
+    write_value(out, uint8_t(_vblank_started));
+    write_value(out, uint8_t(_sprite_0_hit));
+    write_value(out, _oam_addr);
+    write_value(out, uint8_t(_addr_toggle));
+    write_value(out, _ppu_addr);
+    write_value(out, _temp_ppu_addr);
+    write_value(out, _fine_x_scroll);
+    write_value(out, _scroll_y);
+    write_value(out, _vram_read_buf);
+    write_value(out, _master_cycle.count());
+    write_value(out, _scanline_cycle.count());
+    write_value(out, int32_t(_cur_scanline));
+    write_value(out, _frame_count);
+    write_value(out, uint8_t(_protect_register));
+    write_value(out, _stop_after_frame);
+    write_value(out, int32_t(_auto_stop));
+    write_value(out, _tile_index);
+    write_value(out, _tile_palette_bit32);
+    write_value(out, _bitplane0);
+    write_value(out, _shift_reg);
+    write_value(out, _x_offset);
+    write_value(out, _last_sprite_id);
+    write_value(out, uint8_t(_has_sprite_0));
+    write_value(out, uint8_t(_mask_oam_read));
+    write_value(out, _sprite_pos_y);
+    write_value(out, uint16_t(_mirroring_flags));
+
+    write_value(out, uint8_t(_frame_buffer == _frame_buffer_1 ? 1 : 2));
+    out.insert(out.end(), _frame_buffer_1, _frame_buffer_1 + sizeof(_frame_buffer_1));
+    out.insert(out.end(), _frame_buffer_2, _frame_buffer_2 + sizeof(_frame_buffer_2));
+    out.insert(out.end(), _frame_buffer_bg, _frame_buffer_bg + sizeof(_frame_buffer_bg));
+    out.insert(out.end(), _pixel_cycle, _pixel_cycle + sizeof(_pixel_cycle));
+    out.insert(out.end(), reinterpret_cast<const uint8_t*>(&_sprite_buf[0]), reinterpret_cast<const uint8_t*>(&_sprite_buf[0]) + sizeof(_sprite_buf));
+}
+
+bool nes_ppu::deserialize(const uint8_t *data, size_t size, size_t &offset)
+{
+    uint8_t b = 0;
+    uint32_t len = 0;
+    int64_t master_cycle = 0;
+    int64_t scanline_cycle = 0;
+    int32_t cur_scanline = 0;
+    int32_t auto_stop = 0;
+    uint16_t mirror_flags = 0;
+    uint8_t frame_buffer_id = 0;
+
+    if (!read_value(data, size, offset, len) || len != PPU_VRAM_SIZE || offset + len > size) return false;
+    memcpy_s(_vram.get(), PPU_VRAM_SIZE, data + offset, len);
+    offset += len;
+    if (!read_value(data, size, offset, len) || len != PPU_OAM_SIZE || offset + len > size) return false;
+    memcpy_s(_oam.get(), PPU_OAM_SIZE, data + offset, len);
+    offset += len;
+
+    if (!read_value(data, size, offset, _name_tbl_addr)) return false;
+    if (!read_value(data, size, offset, _bg_pattern_tbl_addr)) return false;
+    if (!read_value(data, size, offset, _sprite_pattern_tbl_addr)) return false;
+    if (!read_value(data, size, offset, _ppu_addr_inc)) return false;
+    if (!read_value(data, size, offset, b)) return false; _vblank_nmi = (b != 0);
+    if (!read_value(data, size, offset, b)) return false; _use_8x16_sprite = (b != 0);
+    if (!read_value(data, size, offset, _sprite_height)) return false;
+    if (!read_value(data, size, offset, b)) return false; _show_bg = (b != 0);
+    if (!read_value(data, size, offset, b)) return false; _show_sprites = (b != 0);
+    if (!read_value(data, size, offset, b)) return false; _gray_scale_mode = (b != 0);
+    if (!read_value(data, size, offset, _latch)) return false;
+    if (!read_value(data, size, offset, b)) return false; _sprite_overflow = (b != 0);
+    if (!read_value(data, size, offset, b)) return false; _vblank_started = (b != 0);
+    if (!read_value(data, size, offset, b)) return false; _sprite_0_hit = (b != 0);
+    if (!read_value(data, size, offset, _oam_addr)) return false;
+    if (!read_value(data, size, offset, b)) return false; _addr_toggle = (b != 0);
+    if (!read_value(data, size, offset, _ppu_addr)) return false;
+    if (!read_value(data, size, offset, _temp_ppu_addr)) return false;
+    if (!read_value(data, size, offset, _fine_x_scroll)) return false;
+    if (!read_value(data, size, offset, _scroll_y)) return false;
+    if (!read_value(data, size, offset, _vram_read_buf)) return false;
+    if (!read_value(data, size, offset, master_cycle)) return false; _master_cycle = nes_cycle_t(master_cycle);
+    if (!read_value(data, size, offset, scanline_cycle)) return false; _scanline_cycle = nes_ppu_cycle_t(scanline_cycle);
+    if (!read_value(data, size, offset, cur_scanline)) return false; _cur_scanline = cur_scanline;
+    if (!read_value(data, size, offset, _frame_count)) return false;
+    if (!read_value(data, size, offset, b)) return false; _protect_register = (b != 0);
+    if (!read_value(data, size, offset, _stop_after_frame)) return false;
+    if (!read_value(data, size, offset, auto_stop)) return false; _auto_stop = auto_stop;
+    if (!read_value(data, size, offset, _tile_index)) return false;
+    if (!read_value(data, size, offset, _tile_palette_bit32)) return false;
+    if (!read_value(data, size, offset, _bitplane0)) return false;
+    if (!read_value(data, size, offset, _shift_reg)) return false;
+    if (!read_value(data, size, offset, _x_offset)) return false;
+    if (!read_value(data, size, offset, _last_sprite_id)) return false;
+    if (!read_value(data, size, offset, b)) return false; _has_sprite_0 = (b != 0);
+    if (!read_value(data, size, offset, b)) return false; _mask_oam_read = (b != 0);
+    if (!read_value(data, size, offset, _sprite_pos_y)) return false;
+    if (!read_value(data, size, offset, mirror_flags)) return false; _mirroring_flags = nes_mapper_flags(mirror_flags);
+
+    if (!read_value(data, size, offset, frame_buffer_id)) return false;
+    if (offset + sizeof(_frame_buffer_1) + sizeof(_frame_buffer_2) + sizeof(_frame_buffer_bg) + sizeof(_pixel_cycle) + sizeof(_sprite_buf) > size) return false;
+    memcpy_s(_frame_buffer_1, sizeof(_frame_buffer_1), data + offset, sizeof(_frame_buffer_1)); offset += sizeof(_frame_buffer_1);
+    memcpy_s(_frame_buffer_2, sizeof(_frame_buffer_2), data + offset, sizeof(_frame_buffer_2)); offset += sizeof(_frame_buffer_2);
+    memcpy_s(_frame_buffer_bg, sizeof(_frame_buffer_bg), data + offset, sizeof(_frame_buffer_bg)); offset += sizeof(_frame_buffer_bg);
+    memcpy_s(_pixel_cycle, sizeof(_pixel_cycle), data + offset, sizeof(_pixel_cycle)); offset += sizeof(_pixel_cycle);
+    memcpy_s(&_sprite_buf[0], sizeof(_sprite_buf), data + offset, sizeof(_sprite_buf)); offset += sizeof(_sprite_buf);
+    _frame_buffer = (frame_buffer_id == 1) ? _frame_buffer_1 : _frame_buffer_2;
+
+    return true;
 }
 
 // fetching tile for current line

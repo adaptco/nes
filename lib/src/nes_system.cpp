@@ -11,6 +11,33 @@
 
 #include <array>
 
+namespace
+{
+    static const uint32_t NES_STATE_MAGIC = 0x3153454E; // NES1
+    static const uint16_t NES_STATE_VERSION = 1;
+
+    template<typename T>
+    void write_value(vector<uint8_t> &out, T value)
+    {
+        for (size_t i = 0; i < sizeof(T); ++i)
+            out.push_back(uint8_t((uint64_t(value) >> (i * 8)) & 0xff));
+    }
+
+    template<typename T>
+    bool read_value(const uint8_t *data, size_t size, size_t &offset, T &value)
+    {
+        if (offset + sizeof(T) > size)
+            return false;
+
+        uint64_t v = 0;
+        for (size_t i = 0; i < sizeof(T); ++i)
+            v |= uint64_t(data[offset++]) << (i * 8);
+
+        value = T(v);
+        return true;
+    }
+}
+
 using namespace std;
 
 

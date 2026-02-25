@@ -608,4 +608,3 @@ private :
     bool            _is_stop_at_addr;       // stop at a certain address - useful for testing
     uint16_t        _stop_at_addr;          // stop at a certain address - useful for testing
 };
-

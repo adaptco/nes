@@ -119,6 +119,10 @@ class nes_memory;
 class nes_mapper
 {
 public :
+    virtual void serialize(vector<uint8_t> &out) const {}
+    virtual bool deserialize(const uint8_t *data, size_t size, size_t &offset) { return true; }
+    virtual uint16_t mapper_id() const = 0;
+
     //
     // Called when mapper is loaded into memory
     // Useful when all you need is a one-time memcpy
@@ -164,6 +168,7 @@ public :
     virtual void on_load_ram(nes_memory &mem);
     virtual void on_load_ppu(nes_ppu &ppu);
     virtual void get_info(nes_mapper_info &info);
+    virtual uint16_t mapper_id() const { return 0; }
 
 private :
     shared_ptr<vector<uint8_t>> _prg_rom;
@@ -373,4 +378,3 @@ public :
         return mapper;
     }
 };
-

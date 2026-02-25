@@ -128,4 +128,3 @@ private :
 
     nes_mapper_info _mapper_info;
 };
-
