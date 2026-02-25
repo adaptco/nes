@@ -1,5 +1,29 @@
 #include "stdafx.h"
 
+namespace
+{
+    template<typename T>
+    void write_value(vector<uint8_t> &out, T value)
+    {
+        for (size_t i = 0; i < sizeof(T); ++i)
+            out.push_back(uint8_t((uint64_t(value) >> (i * 8)) & 0xff));
+    }
+
+    template<typename T>
+    bool read_value(const uint8_t *data, size_t size, size_t &offset, T &value)
+    {
+        if (offset + sizeof(T) > size)
+            return false;
+
+        uint64_t v = 0;
+        for (size_t i = 0; i < sizeof(T); ++i)
+            v |= uint64_t(data[offset++]) << (i * 8);
+
+        value = T(v);
+        return true;
+    }
+}
+
 //
 // Called when mapper is loaded into memory
 // Useful when all you need is a one-time memcpy
@@ -221,3 +245,20 @@ void nes_mapper_mmc3::write_bank_data(uint8_t val)
     }
 }
 
+void nes_mapper_mmc3::serialize(vector<uint8_t> &out) const
+{
+    write_value(out, _bank_select);
+    write_value(out, _prev_prg_mode);
+    write_value(out, uint8_t(_vertical_mirroring ? 1 : 0));
+}
+
+bool nes_mapper_mmc3::deserialize(const uint8_t *data, size_t size, size_t &offset)
+{
+    uint8_t vertical = 0;
+    if (!read_value(data, size, offset, _bank_select)) return false;
+    if (!read_value(data, size, offset, _prev_prg_mode)) return false;
+    if (!read_value(data, size, offset, vertical)) return false;
+    _vertical_mirroring = (vertical != 0);
+    _ppu->set_mirroring(nes_mapper_flags(_vertical_mirroring ? nes_mapper_flags_vertical_mirroring : nes_mapper_flags_horizontal_mirroring));
+    return true;
+}

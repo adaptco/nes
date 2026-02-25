@@ -1,5 +1,29 @@
 #include "stdafx.h"
 
+namespace
+{
+    template<typename T>
+    void write_value(vector<uint8_t> &out, T value)
+    {
+        for (size_t i = 0; i < sizeof(T); ++i)
+            out.push_back(uint8_t((uint64_t(value) >> (i * 8)) & 0xff));
+    }
+
+    template<typename T>
+    bool read_value(const uint8_t *data, size_t size, size_t &offset, T &value)
+    {
+        if (offset + sizeof(T) > size)
+            return false;
+
+        uint64_t v = 0;
+        for (size_t i = 0; i < sizeof(T); ++i)
+            v |= uint64_t(data[offset++]) << (i * 8);
+
+        value = T(v);
+        return true;
+    }
+}
+
 //
 // Called when mapper is loaded into memory
 // Useful when all you need is a one-time memcpy
@@ -178,4 +202,27 @@ void nes_mapper_mmc1::write_prg_bank(uint8_t val)
         // 32KB mode at $8000
         _mem->set_bytes(0x8000, _prg_rom->data() + (val & 0xe) * 0x4000, 0x8000);
     }
+}
+
+void nes_mapper_mmc1::serialize(vector<uint8_t> &out) const
+{
+    write_value(out, _bit_latch);
+    write_value(out, _reg);
+    write_value(out, _control);
+    write_value(out, uint8_t(_vertical_mirroring ? 1 : 0));
+}
+
+bool nes_mapper_mmc1::deserialize(const uint8_t *data, size_t size, size_t &offset)
+{
+    uint8_t vertical = 0;
+
+    if (!read_value(data, size, offset, _bit_latch)) return false;
+    if (!read_value(data, size, offset, _reg)) return false;
+    if (!read_value(data, size, offset, _control)) return false;
+    if (!read_value(data, size, offset, vertical)) return false;
+    _vertical_mirroring = (vertical != 0);
+
+    write_control(_control);
+
+    return true;
 }

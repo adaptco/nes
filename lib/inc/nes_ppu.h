@@ -162,6 +162,9 @@ public :
 
     void load_mapper(shared_ptr<nes_mapper> &mapper);
 
+    void serialize(vector<uint8_t> &out) const;
+    bool deserialize(const uint8_t *data, size_t size, size_t &offset);
+
     void set_mirroring(nes_mapper_flags flags);
 
     uint8_t *frame_buffer()
