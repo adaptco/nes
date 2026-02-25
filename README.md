@@ -55,6 +55,25 @@ I've tested with following games:
   * Teenager Mutant Turtle 2 - freeze on start
   * Teenager Mutant Turtle 3 - freeze on start
 
+
+## Containerized development
+
+A Docker container is included for reproducible local development.
+
+### Build the container
+
+```bash
+docker build -t neschan-dev .
+```
+
+### Start an interactive shell
+
+```bash
+docker run --rm -it -v "$PWD":/workspace/nes -w /workspace/nes neschan-dev
+```
+
+From inside the container, run your preferred build commands (for example CMake/Ninja).
+
 ## How to build
 
 ### Building on Windows
@@ -87,6 +106,14 @@ You'll need SDL2, XCode developer build tools, CMake.
 neschan.exe *rom_path* 
 
 Sorry. No fancy UI yet. 
+
+Deterministic replay/headless example:
+
+```
+neschan <rom_path> --replay input.log --headless --max-frames 600
+```
+
+Replay log format is `<frame_index> <button_flags>`; see `doc/replay_input_log.md`.
 
 ## Next steps
 

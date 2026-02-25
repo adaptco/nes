@@ -1,0 +1,10 @@
+.git
+.gitignore
+build
+bin
+*.o
+*.obj
+*.user
+*.suo
+*.db
+*.VC.db

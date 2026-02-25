@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include <cstring>
 
 #include "nes_ppu.h"
 #include "nes_system.h"
@@ -147,6 +148,76 @@ void nes_ppu::init()
 void nes_ppu::reset()
 {
     init();
+}
+
+
+
+void nes_ppu::serialize(vector<uint8_t> &out) const
+{
+    auto push16 = [&](uint16_t v) { out.push_back(uint8_t(v & 0xff)); out.push_back(uint8_t((v >> 8) & 0xff)); };
+    auto push32 = [&](uint32_t v) { for (int i = 0; i < 4; ++i) out.push_back(uint8_t((v >> (i * 8)) & 0xff)); };
+    auto push64 = [&](uint64_t v) { for (int i = 0; i < 8; ++i) out.push_back(uint8_t((v >> (i * 8)) & 0xff)); };
+
+    push16(_name_tbl_addr); push16(_bg_pattern_tbl_addr); push16(_sprite_pattern_tbl_addr); push16(_ppu_addr_inc);
+    out.push_back(_vblank_nmi ? 1 : 0); out.push_back(_use_8x16_sprite ? 1 : 0); out.push_back(_sprite_height);
+    out.push_back(_show_bg ? 1 : 0); out.push_back(_show_sprites ? 1 : 0); out.push_back(_gray_scale_mode ? 1 : 0);
+    out.push_back(_latch); out.push_back(_sprite_overflow ? 1 : 0); out.push_back(_vblank_started ? 1 : 0); out.push_back(_sprite_0_hit ? 1 : 0);
+    out.push_back(_oam_addr); out.push_back(_addr_toggle ? 1 : 0);
+    push16(_ppu_addr); push16(_temp_ppu_addr); out.push_back(_fine_x_scroll); out.push_back(_scroll_y); out.push_back(_vram_read_buf);
+    push64(uint64_t(_master_cycle.count())); push64(uint64_t(_scanline_cycle.count()));
+    push32(uint32_t(_cur_scanline)); push32(_frame_count);
+    out.push_back(_protect_register ? 1 : 0); push32(_stop_after_frame); out.push_back(_auto_stop ? 1 : 0);
+    out.push_back(_tile_index); out.push_back(_tile_palette_bit32); out.push_back(_bitplane0);
+    out.push_back(_frame_buffer == _frame_buffer_1 ? 1 : 2);
+    out.insert(out.end(), _frame_buffer_1, _frame_buffer_1 + sizeof(_frame_buffer_1));
+    out.insert(out.end(), _frame_buffer_2, _frame_buffer_2 + sizeof(_frame_buffer_2));
+    out.insert(out.end(), _frame_buffer_bg, _frame_buffer_bg + sizeof(_frame_buffer_bg));
+    out.insert(out.end(), _pixel_cycle, _pixel_cycle + sizeof(_pixel_cycle));
+    out.push_back(_shift_reg); out.push_back(_x_offset);
+
+    out.push_back(_last_sprite_id); out.push_back(_has_sprite_0 ? 1 : 0); out.push_back(_mask_oam_read ? 1 : 0); out.push_back(_sprite_pos_y);
+    out.insert(out.end(), (uint8_t*)_sprite_buf, (uint8_t*)_sprite_buf + sizeof(_sprite_buf));
+    out.push_back(uint8_t(_mirroring_flags));
+
+    out.insert(out.end(), _vram.get(), _vram.get() + PPU_VRAM_SIZE);
+    out.insert(out.end(), _oam.get(), _oam.get() + PPU_OAM_SIZE);
+}
+
+bool nes_ppu::deserialize(const uint8_t *data, size_t size, size_t &offset)
+{
+    auto need = [&](size_t n){ return offset + n <= size; };
+    auto rd16 = [&](){ uint16_t v = uint16_t(data[offset]) | (uint16_t(data[offset + 1]) << 8); offset += 2; return v; };
+    auto rd32 = [&](){ uint32_t v = 0; for (int i=0;i<4;++i) v |= (uint32_t(data[offset++]) << (i*8)); return v; };
+    auto rd64 = [&](){ uint64_t v = 0; for (int i=0;i<8;++i) v |= (uint64_t(data[offset++]) << (i*8)); return v; };
+
+    size_t fixed = 79 + sizeof(_frame_buffer_1) + sizeof(_frame_buffer_2) + sizeof(_frame_buffer_bg) + sizeof(_pixel_cycle) + sizeof(_sprite_buf) + PPU_VRAM_SIZE + PPU_OAM_SIZE;
+    if (!need(fixed)) return false;
+
+    _name_tbl_addr = rd16(); _bg_pattern_tbl_addr = rd16(); _sprite_pattern_tbl_addr = rd16(); _ppu_addr_inc = rd16();
+    _vblank_nmi = data[offset++] != 0; _use_8x16_sprite = data[offset++] != 0; _sprite_height = data[offset++];
+    _show_bg = data[offset++] != 0; _show_sprites = data[offset++] != 0; _gray_scale_mode = data[offset++] != 0;
+    _latch = data[offset++]; _sprite_overflow = data[offset++] != 0; _vblank_started = data[offset++] != 0; _sprite_0_hit = data[offset++] != 0;
+    _oam_addr = data[offset++]; _addr_toggle = data[offset++] != 0;
+    _ppu_addr = rd16(); _temp_ppu_addr = rd16(); _fine_x_scroll = data[offset++]; _scroll_y = data[offset++]; _vram_read_buf = data[offset++];
+    _master_cycle = nes_cycle_t((int64_t)rd64()); _scanline_cycle = nes_ppu_cycle_t((int64_t)rd64());
+    _cur_scanline = (int)rd32(); _frame_count = rd32();
+    _protect_register = data[offset++] != 0; _stop_after_frame = rd32(); _auto_stop = data[offset++] != 0;
+    _tile_index = data[offset++]; _tile_palette_bit32 = data[offset++]; _bitplane0 = data[offset++];
+    uint8_t frame_sel = data[offset++];
+    memcpy_s(_frame_buffer_1, sizeof(_frame_buffer_1), data + offset, sizeof(_frame_buffer_1)); offset += sizeof(_frame_buffer_1);
+    memcpy_s(_frame_buffer_2, sizeof(_frame_buffer_2), data + offset, sizeof(_frame_buffer_2)); offset += sizeof(_frame_buffer_2);
+    memcpy_s(_frame_buffer_bg, sizeof(_frame_buffer_bg), data + offset, sizeof(_frame_buffer_bg)); offset += sizeof(_frame_buffer_bg);
+    memcpy_s(_pixel_cycle, sizeof(_pixel_cycle), data + offset, sizeof(_pixel_cycle)); offset += sizeof(_pixel_cycle);
+    _shift_reg = data[offset++]; _x_offset = data[offset++];
+    _last_sprite_id = data[offset++]; _has_sprite_0 = data[offset++] != 0; _mask_oam_read = data[offset++] != 0; _sprite_pos_y = data[offset++];
+    memcpy_s(_sprite_buf, sizeof(_sprite_buf), data + offset, sizeof(_sprite_buf)); offset += sizeof(_sprite_buf);
+    _mirroring_flags = (nes_mapper_flags)data[offset++];
+
+    memcpy_s(_vram.get(), PPU_VRAM_SIZE, data + offset, PPU_VRAM_SIZE); offset += PPU_VRAM_SIZE;
+    memcpy_s(_oam.get(), PPU_OAM_SIZE, data + offset, PPU_OAM_SIZE); offset += PPU_OAM_SIZE;
+
+    _frame_buffer = (frame_sel == 2) ? _frame_buffer_2 : _frame_buffer_1;
+    return true;
 }
 
 void nes_ppu::power_on(nes_system *system)
@@ -709,6 +780,7 @@ void nes_ppu::step_ppu(nes_ppu_cycle_t count)
         if (_cur_scanline >= PPU_SCANLINE_COUNT)
         {
             _cur_scanline %= PPU_SCANLINE_COUNT;
+            // Frame boundary: publish the finished frame by swapping read/write buffers.
             swap_buffer();
             _frame_count++;
             NES_TRACE4("[NES_PPU] FRAME " << std::dec << _frame_count << " ------ ");
@@ -721,4 +793,170 @@ void nes_ppu::step_ppu(nes_ppu_cycle_t count)
         }
         NES_TRACE4("[NES_PPU] SCANLINE " << std::dec << (uint32_t) _cur_scanline << " ------ ");
     }
+}
+namespace
+{
+    template <typename T>
+    void append_state(std::vector<uint8_t> &out, const T &value)
+    {
+        auto begin = reinterpret_cast<const uint8_t *>(&value);
+        out.insert(out.end(), begin, begin + sizeof(T));
+    }
+
+    template <typename T>
+    bool read_state(const std::vector<uint8_t> &in, size_t &offset, T *value)
+    {
+        if (offset + sizeof(T) > in.size())
+            return false;
+
+        memcpy(value, in.data() + offset, sizeof(T));
+        offset += sizeof(T);
+        return true;
+    }
+}
+
+void nes_ppu::serialize(vector<uint8_t> &out) const
+{
+    out.insert(out.end(), _vram.get(), _vram.get() + PPU_VRAM_SIZE);
+    out.insert(out.end(), _oam.get(), _oam.get() + PPU_OAM_SIZE);
+
+    append_state(out, _name_tbl_addr);
+    append_state(out, _bg_pattern_tbl_addr);
+    append_state(out, _sprite_pattern_tbl_addr);
+    append_state(out, _ppu_addr_inc);
+    append_state(out, _vblank_nmi);
+    append_state(out, _use_8x16_sprite);
+    append_state(out, _sprite_height);
+    append_state(out, _show_bg);
+    append_state(out, _show_sprites);
+    append_state(out, _gray_scale_mode);
+    append_state(out, _latch);
+    append_state(out, _sprite_overflow);
+    append_state(out, _vblank_started);
+    append_state(out, _sprite_0_hit);
+    append_state(out, _oam_addr);
+    append_state(out, _addr_toggle);
+    append_state(out, _ppu_addr);
+    append_state(out, _temp_ppu_addr);
+    append_state(out, _fine_x_scroll);
+    append_state(out, _scroll_y);
+    append_state(out, _vram_read_buf);
+
+    int64_t master_cycle = _master_cycle.count();
+    int64_t scanline_cycle = _scanline_cycle.count();
+    append_state(out, master_cycle);
+    append_state(out, scanline_cycle);
+    append_state(out, _cur_scanline);
+    append_state(out, _frame_count);
+
+    append_state(out, _protect_register);
+    append_state(out, _stop_after_frame);
+    append_state(out, _auto_stop);
+
+    append_state(out, _tile_index);
+    append_state(out, _tile_palette_bit32);
+    append_state(out, _bitplane0);
+
+    uint8_t frame_buffer_select = (_frame_buffer == _frame_buffer_1) ? 1 : 2;
+    append_state(out, frame_buffer_select);
+
+    out.insert(out.end(), _frame_buffer_1, _frame_buffer_1 + sizeof(_frame_buffer_1));
+    out.insert(out.end(), _frame_buffer_bg, _frame_buffer_bg + sizeof(_frame_buffer_bg));
+    out.insert(out.end(), _frame_buffer_2, _frame_buffer_2 + sizeof(_frame_buffer_2));
+    out.insert(out.end(), _pixel_cycle, _pixel_cycle + sizeof(_pixel_cycle));
+
+    append_state(out, _shift_reg);
+    append_state(out, _x_offset);
+
+    out.insert(out.end(), reinterpret_cast<const uint8_t *>(_sprite_buf), reinterpret_cast<const uint8_t *>(_sprite_buf) + sizeof(_sprite_buf));
+
+    append_state(out, _last_sprite_id);
+    append_state(out, _has_sprite_0);
+    append_state(out, _mask_oam_read);
+    append_state(out, _sprite_pos_y);
+    append_state(out, _mirroring_flags);
+}
+
+bool nes_ppu::deserialize(const vector<uint8_t> &in, size_t &offset)
+{
+    if (offset + PPU_VRAM_SIZE + PPU_OAM_SIZE > in.size())
+        return false;
+
+    memcpy(_vram.get(), in.data() + offset, PPU_VRAM_SIZE);
+    offset += PPU_VRAM_SIZE;
+    memcpy(_oam.get(), in.data() + offset, PPU_OAM_SIZE);
+    offset += PPU_OAM_SIZE;
+
+    int64_t master_cycle;
+    int64_t scanline_cycle;
+    uint8_t frame_buffer_select;
+
+    bool ok =
+        read_state(in, offset, &_name_tbl_addr) &&
+        read_state(in, offset, &_bg_pattern_tbl_addr) &&
+        read_state(in, offset, &_sprite_pattern_tbl_addr) &&
+        read_state(in, offset, &_ppu_addr_inc) &&
+        read_state(in, offset, &_vblank_nmi) &&
+        read_state(in, offset, &_use_8x16_sprite) &&
+        read_state(in, offset, &_sprite_height) &&
+        read_state(in, offset, &_show_bg) &&
+        read_state(in, offset, &_show_sprites) &&
+        read_state(in, offset, &_gray_scale_mode) &&
+        read_state(in, offset, &_latch) &&
+        read_state(in, offset, &_sprite_overflow) &&
+        read_state(in, offset, &_vblank_started) &&
+        read_state(in, offset, &_sprite_0_hit) &&
+        read_state(in, offset, &_oam_addr) &&
+        read_state(in, offset, &_addr_toggle) &&
+        read_state(in, offset, &_ppu_addr) &&
+        read_state(in, offset, &_temp_ppu_addr) &&
+        read_state(in, offset, &_fine_x_scroll) &&
+        read_state(in, offset, &_scroll_y) &&
+        read_state(in, offset, &_vram_read_buf) &&
+        read_state(in, offset, &master_cycle) &&
+        read_state(in, offset, &scanline_cycle) &&
+        read_state(in, offset, &_cur_scanline) &&
+        read_state(in, offset, &_frame_count) &&
+        read_state(in, offset, &_protect_register) &&
+        read_state(in, offset, &_stop_after_frame) &&
+        read_state(in, offset, &_auto_stop) &&
+        read_state(in, offset, &_tile_index) &&
+        read_state(in, offset, &_tile_palette_bit32) &&
+        read_state(in, offset, &_bitplane0) &&
+        read_state(in, offset, &frame_buffer_select);
+
+    if (!ok)
+        return false;
+
+    if (offset + sizeof(_frame_buffer_1) + sizeof(_frame_buffer_bg) + sizeof(_frame_buffer_2) + sizeof(_pixel_cycle) + sizeof(_sprite_buf) > in.size())
+        return false;
+
+    memcpy(_frame_buffer_1, in.data() + offset, sizeof(_frame_buffer_1));
+    offset += sizeof(_frame_buffer_1);
+    memcpy(_frame_buffer_bg, in.data() + offset, sizeof(_frame_buffer_bg));
+    offset += sizeof(_frame_buffer_bg);
+    memcpy(_frame_buffer_2, in.data() + offset, sizeof(_frame_buffer_2));
+    offset += sizeof(_frame_buffer_2);
+    memcpy(_pixel_cycle, in.data() + offset, sizeof(_pixel_cycle));
+    offset += sizeof(_pixel_cycle);
+
+    memcpy(_sprite_buf, in.data() + offset, sizeof(_sprite_buf));
+    offset += sizeof(_sprite_buf);
+
+    ok =
+        read_state(in, offset, &_shift_reg) &&
+        read_state(in, offset, &_x_offset) &&
+        read_state(in, offset, &_last_sprite_id) &&
+        read_state(in, offset, &_has_sprite_0) &&
+        read_state(in, offset, &_mask_oam_read) &&
+        read_state(in, offset, &_sprite_pos_y) &&
+        read_state(in, offset, &_mirroring_flags);
+
+    if (!ok)
+        return false;
+
+    _master_cycle = nes_cycle_t(master_cycle);
+    _scanline_cycle = nes_ppu_cycle_t(scanline_cycle);
+    _frame_buffer = (frame_buffer_select == 1) ? _frame_buffer_1 : _frame_buffer_2;
+    return true;
 }
