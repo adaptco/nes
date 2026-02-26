@@ -10,7 +10,7 @@ using namespace std;
 namespace
 {
     static const uint32_t NES_STATE_MAGIC = 0x3153454e; // NES1
-    static const uint32_t NES_STATE_VERSION = 1;
+    static const uint32_t NES_STATE_VERSION = 2;
 
     void push_u32(vector<uint8_t> &out, uint32_t v)
     {
