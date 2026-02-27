@@ -1,0 +1,16 @@
+services:
+  nes-backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    image: neschan-backend:latest
+    working_dir: /workspace/nes
+    stdin_open: true
+    tty: true
+    environment:
+      NES_MODEL_DIR: /opt/nes/models
+      NES_ROM_DIR: /workspace/nes/roms
+    volumes:
+      - ./:/workspace/nes
+      - ./models:/opt/nes/models:ro
+    command: bash

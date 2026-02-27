@@ -234,13 +234,7 @@ bool nes_system::deserialize(const nes_state_blob &state)
         return false;
     }
 
-    if (magic != NES_STATE_MAGIC)
-        return false;
-
-    if (version == NES_STATE_VERSION_V1)
-        return deserialize_v1(data, size);
-
-    if (version != NES_STATE_VERSION || offset >= size)
+    if (magic != NES_STATE_MAGIC || version > NES_STATE_VERSION || offset >= size)
         return false;
 
     _master_cycle = nes_cycle_t((int64_t)master_cycle);
@@ -249,29 +243,70 @@ bool nes_system::deserialize(const nes_state_blob &state)
     const uint8_t *chunk = nullptr;
     size_t chunk_size = 0;
 
-    if (!read_chunk(data, size, offset, NES_STATE_CHUNK_CPU, chunk, chunk_size))
-        return false;
-    size_t chunk_offset = 0;
-    if (!_cpu->deserialize(chunk, chunk_size, chunk_offset) || chunk_offset != chunk_size)
-        return false;
+    switch (version)
+    {
+    case 2:
+    {
+        if (!read_chunk(data, size, offset, NES_STATE_CHUNK_CPU, chunk, chunk_size))
+            return false;
+        size_t chunk_offset = 0;
+        if (!_cpu->deserialize(chunk, chunk_size, chunk_offset) || chunk_offset != chunk_size)
+            return false;
 
-    if (!read_chunk(data, size, offset, NES_STATE_CHUNK_RAM, chunk, chunk_size))
-        return false;
-    chunk_offset = 0;
-    if (!_ram->deserialize(chunk, chunk_size, chunk_offset) || chunk_offset != chunk_size)
-        return false;
+        if (!read_chunk(data, size, offset, NES_STATE_CHUNK_RAM, chunk, chunk_size))
+            return false;
+        chunk_offset = 0;
+        if (!_ram->deserialize(chunk, chunk_size, chunk_offset) || chunk_offset != chunk_size)
+            return false;
 
-    if (!read_chunk(data, size, offset, NES_STATE_CHUNK_PPU, chunk, chunk_size))
-        return false;
-    chunk_offset = 0;
-    if (!_ppu->deserialize(chunk, chunk_size, chunk_offset) || chunk_offset != chunk_size)
-        return false;
+        if (!read_chunk(data, size, offset, NES_STATE_CHUNK_PPU, chunk, chunk_size))
+            return false;
+        chunk_offset = 0;
+        if (!_ppu->deserialize(chunk, chunk_size, chunk_offset) || chunk_offset != chunk_size)
+            return false;
 
-    if (!read_chunk(data, size, offset, NES_STATE_CHUNK_INPT, chunk, chunk_size))
+        if (!read_chunk(data, size, offset, NES_STATE_CHUNK_INPT, chunk, chunk_size))
+            return false;
+        chunk_offset = 0;
+        if (!_input->deserialize(chunk, chunk_size, chunk_offset) || chunk_offset != chunk_size)
+            return false;
+        break;
+    }
+    case 1:
+    {
+        uint32_t section_size = 0;
+        if (!read_u32(data, size, offset, section_size) || offset + section_size > size)
+            return false;
+        size_t section_offset = 0;
+        if (!_cpu->deserialize(data + offset, section_size, section_offset) || section_offset != section_size)
+            return false;
+        offset += section_size;
+
+        if (!read_u32(data, size, offset, section_size) || offset + section_size > size)
+            return false;
+        section_offset = 0;
+        if (!_ram->deserialize(data + offset, section_size, section_offset) || section_offset != section_size)
+            return false;
+        offset += section_size;
+
+        if (!read_u32(data, size, offset, section_size) || offset + section_size > size)
+            return false;
+        section_offset = 0;
+        if (!_ppu->deserialize(data + offset, section_size, section_offset) || section_offset != section_size)
+            return false;
+        offset += section_size;
+
+        if (!read_u32(data, size, offset, section_size) || offset + section_size > size)
+            return false;
+        section_offset = 0;
+        if (!_input->deserialize(data + offset, section_size, section_offset) || section_offset != section_size)
+            return false;
+        offset += section_size;
+        break;
+    }
+    default:
         return false;
-    chunk_offset = 0;
-    if (!_input->deserialize(chunk, chunk_size, chunk_offset) || chunk_offset != chunk_size)
-        return false;
+    }
 
     return offset == size;
 }

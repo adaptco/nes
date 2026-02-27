@@ -103,6 +103,9 @@ public :
     void serialize(vector<uint8_t> &out) const;
     bool deserialize(const uint8_t *data, size_t size, size_t &offset);
 
+    void serialize(vector<uint8_t> &out) const;
+    bool deserialize(const uint8_t *&cursor, const uint8_t *end);
+
 public :
     //
     // nes_component overrides
