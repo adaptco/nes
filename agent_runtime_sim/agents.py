@@ -37,7 +37,7 @@ class BaseAgentController:
 class RandomWalkController(BaseAgentController):
     def __init__(self, seed: int | None = None) -> None:
         self._rng = random.Random(seed)
+        self._choices = list(MOVE_VECTORS.keys())
 
     def decide(self, view: dict) -> AgentAction:
-        choices = list(MOVE_VECTORS.keys())
-        return AgentAction(move=self._rng.choice(choices))
+        return AgentAction(move=self._rng.choice(self._choices))
