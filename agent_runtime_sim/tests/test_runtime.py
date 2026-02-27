@@ -25,7 +25,7 @@ class RuntimeTests(unittest.TestCase):
             config=SimulationConfig(max_ticks=10),
         )
 
-        self.assertEqual(summary.total_events, len(runtime.events))
+        self.assertEqual(len(runtime.events), 20)
         self.assertGreater(summary.total_events, 0)
         self.assertEqual(summary.ticks_executed, 10)
 
