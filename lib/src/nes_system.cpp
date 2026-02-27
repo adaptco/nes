@@ -14,17 +14,16 @@
 namespace
 {
     static const uint32_t NES_STATE_MAGIC = 0x3153454E; // NES1
-    static const uint16_t NES_STATE_VERSION = 1;
+    static const uint32_t NES_STATE_VERSION = 2;
+    static const uint16_t NES_STATE_VERSION_V1 = 1;
+
+    static const uint32_t NES_STATE_CHUNK_CPU = 0x20555043;   // CPU
+    static const uint32_t NES_STATE_CHUNK_RAM = 0x204d4152;   // RAM
+    static const uint32_t NES_STATE_CHUNK_PPU = 0x20555050;   // PPU
+    static const uint32_t NES_STATE_CHUNK_INPT = 0x54504e49;  // INPT
 
     template<typename T>
-    void write_value(vector<uint8_t> &out, T value)
-    {
-        for (size_t i = 0; i < sizeof(T); ++i)
-            out.push_back(uint8_t((uint64_t(value) >> (i * 8)) & 0xff));
-    }
-
-    template<typename T>
-    bool read_value(const uint8_t *data, size_t size, size_t &offset, T &value)
+    bool v1_read_value(const uint8_t *data, size_t size, size_t &offset, T &value)
     {
         if (offset + sizeof(T) > size)
             return false;
@@ -36,20 +35,6 @@ namespace
         value = T(v);
         return true;
     }
-}
-
-using namespace std;
-
-
-namespace
-{
-    static const uint32_t NES_STATE_MAGIC = 0x3153454e; // NES1
-    static const uint32_t NES_STATE_VERSION = 2;
-
-    static const uint32_t NES_STATE_CHUNK_CPU = 0x20555043;   // CPU 
-    static const uint32_t NES_STATE_CHUNK_RAM = 0x204d4152;   // RAM 
-    static const uint32_t NES_STATE_CHUNK_PPU = 0x20555050;   // PPU 
-    static const uint32_t NES_STATE_CHUNK_INPT = 0x54504e49;  // INPT
 
     void push_u32(vector<uint8_t> &out, uint32_t v)
     {
@@ -110,6 +95,8 @@ namespace
         return true;
     }
 }
+
+using namespace std;
 
 nes_system::nes_system()
 {
@@ -202,6 +189,39 @@ bool nes_system::deserialize(const nes_state_blob &state)
 {
     const uint8_t *data = state.data.data();
     size_t size = state.data.size();
+
+    auto deserialize_v1 = [this](const uint8_t *state_data, size_t state_size) -> bool
+    {
+        size_t state_offset = 0;
+        uint32_t magic = 0;
+        uint16_t version = 0;
+        int64_t master_cycle = 0;
+
+        if (!v1_read_value(state_data, state_size, state_offset, magic) ||
+            !v1_read_value(state_data, state_size, state_offset, version) ||
+            !v1_read_value(state_data, state_size, state_offset, master_cycle))
+        {
+            return false;
+        }
+
+        if (magic != NES_STATE_MAGIC || version != NES_STATE_VERSION_V1 || state_offset >= state_size)
+            return false;
+
+        _master_cycle = nes_cycle_t(master_cycle);
+        _stop_requested = state_data[state_offset++] != 0;
+
+        if (!_cpu->deserialize(state_data, state_size, state_offset))
+            return false;
+        if (!_ram->deserialize(state_data, state_size, state_offset))
+            return false;
+        if (!_ppu->deserialize(state_data, state_size, state_offset))
+            return false;
+        if (!_input->deserialize(state_data, state_size, state_offset))
+            return false;
+
+        return state_offset == state_size;
+    };
+
     size_t offset = 0;
 
     uint32_t magic = 0;
