@@ -26,7 +26,7 @@ sudo ./emsdk install latest
 sudo ./emsdk activate latest
 
 # Make emsdk available to interactive shells.
-if ! grep -q "EMSDK" /home/vagrant/.bashrc; then
+if ! grep -q "emsdk_env.sh" /home/vagrant/.bashrc; then
   cat <<'EOS' >> /home/vagrant/.bashrc
 source /opt/emsdk/emsdk_env.sh >/dev/null 2>&1
 EOS
