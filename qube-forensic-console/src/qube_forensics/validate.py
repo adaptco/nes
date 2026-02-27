@@ -10,7 +10,7 @@ def load_schema(path: Path) -> dict:
 
 def validate_or_raise(payload: dict, schema: dict) -> None:
     validator = Draft202012Validator(schema)
-    errors = sorted(validator.iter_errors(payload), key=lambda e: e.path)
+    errors = sorted(validator.iter_errors(payload), key=lambda e: tuple(str(p) for p in e.path))
     if not errors:
         return
     preview = []
