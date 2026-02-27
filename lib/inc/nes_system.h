@@ -23,37 +23,6 @@ struct nes_memory_view
 
 struct nes_system_snapshot
 {
-    // Frame metadata captured at snapshot creation time.
-    uint32_t frame_count;
-
-    // Completed frame buffer (palette index bytes), width x height bytes.
-    const uint8_t *frame_buffer;
-    uint16_t frame_width;
-    uint16_t frame_height;
-
-    // Physical CPU RAM (2 KB at $0000-$07ff, mirrored by CPU addressing logic).
-    nes_memory_view cpu_ram;
-
-    // PPU VRAM (0x4000 bytes) and sprite OAM (0x100 bytes).
-    nes_memory_view ppu_vram;
-    nes_memory_view ppu_oam;
-};
-
-enum nes_rom_exec_mode
-{
-    // Run the PRG ROM directly - useful for ROM-based automation test path
-    nes_rom_exec_mode_direct,
-
-    // At power on, jump directly to the reset 'interrupt' handler which is effectively main
-    // This is what ROM does typically
-    // Interestingly this isn't really "documented" in nesdev.com - I had to infer it from
-    // inspecting ROMs and using debugger from other emulators
-    nes_rom_exec_mode_reset
-};
-
-
-struct nes_system_snapshot
-{
     // Pointer to the latest fully completed frame (palette-index pixels).
     const uint8_t *frame_buffer;
     uint16_t frame_width;
@@ -71,6 +40,18 @@ struct nes_system_snapshot
     size_t ppu_oam_size;
 };
 
+enum nes_rom_exec_mode
+{
+    // Run the PRG ROM directly - useful for ROM-based automation test path
+    nes_rom_exec_mode_direct,
+
+    // At power on, jump directly to the reset 'interrupt' handler which is effectively main
+    // This is what ROM does typically
+    // Interestingly this isn't really "documented" in nesdev.com - I had to infer it from
+    // inspecting ROMs and using debugger from other emulators
+    nes_rom_exec_mode_reset
+};
+
 struct nes_state_blob
 {
     vector<uint8_t> data;
@@ -84,11 +65,6 @@ struct nes_state_blob
 class nes_system
 {
 public :
-    struct nes_state
-    {
-        vector<uint8_t> data;
-    };
-
     nes_system();
     ~nes_system();
 
@@ -104,9 +80,6 @@ public :
 
     void load_rom(const char *rom_path, nes_rom_exec_mode mode);
 
-    nes_state serialize() const;
-    bool deserialize(const nes_state &state);
-   
     nes_cpu     *cpu()      { return _cpu.get();   }
     nes_memory  *ram()      { return _ram.get();   }
     nes_ppu     *ppu()      { return _ppu.get();   } 
