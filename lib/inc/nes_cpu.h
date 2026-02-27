@@ -153,7 +153,7 @@ public :
     void request_dma(uint16_t addr) { _dma_pending = true; _dma_addr = addr; }
 
     void serialize(vector<uint8_t> &out) const;
-    bool deserialize(const uint8_t *&cursor, const uint8_t *end);
+    bool deserialize(const uint8_t *data, size_t size, size_t &offset);
 
 public :
     //
@@ -608,4 +608,3 @@ private :
     bool            _is_stop_at_addr;       // stop at a certain address - useful for testing
     uint16_t        _stop_at_addr;          // stop at a certain address - useful for testing
 };
-

@@ -1,6 +1,30 @@
 #include "stdafx.h"
 #include <cstring>
 
+namespace
+{
+    template<typename T>
+    void write_value(vector<uint8_t> &out, T value)
+    {
+        for (size_t i = 0; i < sizeof(T); ++i)
+            out.push_back(uint8_t((uint64_t(value) >> (i * 8)) & 0xff));
+    }
+
+    template<typename T>
+    bool read_value(const uint8_t *data, size_t size, size_t &offset, T &value)
+    {
+        if (offset + sizeof(T) > size)
+            return false;
+
+        uint64_t v = 0;
+        for (size_t i = 0; i < sizeof(T); ++i)
+            v |= uint64_t(data[offset++]) << (i * 8);
+
+        value = T(v);
+        return true;
+    }
+}
+
 //
 // Called when mapper is loaded into memory
 // Useful when all you need is a one-time memcpy
@@ -39,6 +63,32 @@ void nes_mapper_mmc1::get_info(nes_mapper_info &info)
     info.flags = nes_mapper_flags_has_registers;
     if (_vertical_mirroring)
         info.flags = nes_mapper_flags(info.flags | nes_mapper_flags_vertical_mirroring);
+}
+
+
+
+void nes_mapper_mmc1::serialize(vector<uint8_t> &out) const
+{
+    out.push_back(_bit_latch);
+    out.push_back(_reg);
+    out.push_back(_control);
+    out.push_back(_vertical_mirroring ? 1 : 0);
+}
+
+bool nes_mapper_mmc1::deserialize(const uint8_t *data, size_t size, size_t &offset)
+{
+    if (offset + 4 > size)
+        return false;
+
+    _bit_latch = data[offset++];
+    _reg = data[offset++];
+    _control = data[offset++];
+    _vertical_mirroring = data[offset++] != 0;
+
+    if (_ppu)
+        _ppu->set_mirroring(nes_mapper_flags(_control & nes_mapper_flags_mirroring_mask));
+
+    return true;
 }
 
 void nes_mapper_mmc1::write_reg(uint16_t addr, uint8_t val) 
@@ -103,6 +153,7 @@ MMC1 can do CHR banking in 4KB chunks. Known carts with CHR RAM have 8 KiB, so t
 */
 void nes_mapper_mmc1::write_chr_bank_0(uint8_t val)
 {
+    _chr_bank_0 = val;
     uint32_t addr;
     uint16_t size;
     if (_control & 0x10)
@@ -134,6 +185,7 @@ CCCCC
 */
 void nes_mapper_mmc1::write_chr_bank_1(uint8_t val)
 {
+    _chr_bank_1 = val;
     if (_control & 0x10)
     {
         // 4KB mode only
@@ -158,6 +210,7 @@ RPPPP
 */
 void nes_mapper_mmc1::write_prg_bank(uint8_t val)
 {
+    _prg_bank = val;
     if (_control & 0x8)
     {
         // 16KB mode
@@ -180,45 +233,56 @@ void nes_mapper_mmc1::write_prg_bank(uint8_t val)
         _mem->set_bytes(0x8000, _prg_rom->data() + (val & 0xe) * 0x4000, 0x8000);
     }
 }
-namespace {
-template <typename T>
-void mmc1_append_value(vector<uint8_t> &out, const T &value)
-{
-    const auto *ptr = reinterpret_cast<const uint8_t *>(&value);
-    out.insert(out.end(), ptr, ptr + sizeof(T));
-}
 
-template <typename T>
-bool mmc1_read_value(const uint8_t *&cursor, const uint8_t *end, T &value)
+namespace
 {
-    if (cursor + sizeof(T) > end)
-        return false;
-    memcpy(&value, cursor, sizeof(T));
-    cursor += sizeof(T);
-    return true;
-}
+    template <typename T>
+    void append_state(std::vector<uint8_t> &out, const T &value)
+    {
+        auto begin = reinterpret_cast<const uint8_t *>(&value);
+        out.insert(out.end(), begin, begin + sizeof(T));
+    }
+
+    template <typename T>
+    bool read_state(const std::vector<uint8_t> &in, size_t &offset, T *value)
+    {
+        if (offset + sizeof(T) > in.size())
+            return false;
+
+        memcpy(value, in.data() + offset, sizeof(T));
+        offset += sizeof(T);
+        return true;
+    }
 }
 
 void nes_mapper_mmc1::serialize(vector<uint8_t> &out) const
 {
-    mmc1_append_value(out, _vertical_mirroring);
-    mmc1_append_value(out, _bit_latch);
-    mmc1_append_value(out, _reg);
-    mmc1_append_value(out, _control);
+    append_state(out, _vertical_mirroring);
+    append_state(out, _bit_latch);
+    append_state(out, _reg);
+    append_state(out, _control);
+    append_state(out, _chr_bank_0);
+    append_state(out, _chr_bank_1);
+    append_state(out, _prg_bank);
 }
 
-bool nes_mapper_mmc1::deserialize(const uint8_t *&cursor, const uint8_t *end)
+bool nes_mapper_mmc1::deserialize(const vector<uint8_t> &in, size_t &offset)
 {
-    if (!mmc1_read_value(cursor, end, _vertical_mirroring)
-        || !mmc1_read_value(cursor, end, _bit_latch)
-        || !mmc1_read_value(cursor, end, _reg)
-        || !mmc1_read_value(cursor, end, _control))
-    {
+    bool ok =
+        read_state(in, offset, &_vertical_mirroring) &&
+        read_state(in, offset, &_bit_latch) &&
+        read_state(in, offset, &_reg) &&
+        read_state(in, offset, &_control) &&
+        read_state(in, offset, &_chr_bank_0) &&
+        read_state(in, offset, &_chr_bank_1) &&
+        read_state(in, offset, &_prg_bank);
+
+    if (!ok)
         return false;
-    }
 
-    if (_ppu)
-        _ppu->set_mirroring(nes_mapper_flags(_control & nes_mapper_flags_mirroring_mask));
-
+    write_control(_control);
+    write_chr_bank_0(_chr_bank_0);
+    write_chr_bank_1(_chr_bank_1);
+    write_prg_bank(_prg_bank);
     return true;
 }

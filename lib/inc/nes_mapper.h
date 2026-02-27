@@ -1,14 +1,84 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
 #include <nes_trace.h>
 #include <memory>
 #include <vector>
+
+#include <cstring>
 #include <fstream>
+#include <cstring>
 
 #include <common.h>
 
 using namespace std;
+
+
+class nes_state_stream
+{
+public:
+    nes_state_stream(vector<uint8_t> &buf)
+        : _buf(buf), _offset(0), _ok(true)
+    {
+    }
+
+    size_t offset() const { return _offset; }
+    bool ok() const { return _ok; }
+
+    template<typename T>
+    void write(const T &v)
+    {
+        static_assert(std::is_trivially_copyable<T>::value, "state write requires trivially copyable type");
+        auto old_size = _buf.size();
+        _buf.resize(old_size + sizeof(T));
+        memcpy(&_buf[old_size], &v, sizeof(T));
+    }
+
+    void write_bytes(const uint8_t *src, size_t size)
+    {
+        if (!size) return;
+        auto old_size = _buf.size();
+        _buf.resize(old_size + size);
+        memcpy(&_buf[old_size], src, size);
+    }
+
+    template<typename T>
+    bool read(T &v)
+    {
+        static_assert(std::is_trivially_copyable<T>::value, "state read requires trivially copyable type");
+        if (_offset + sizeof(T) > _buf.size())
+        {
+            _ok = false;
+            memset(&v, 0, sizeof(T));
+            return false;
+        }
+
+        memcpy(&v, &_buf[_offset], sizeof(T));
+        _offset += sizeof(T);
+        return true;
+    }
+
+    bool read_bytes(uint8_t *dest, size_t size)
+    {
+        if (_offset + size > _buf.size())
+        {
+            _ok = false;
+            return false;
+        }
+
+        if (size)
+            memcpy(dest, &_buf[_offset], size);
+
+        _offset += size;
+        return true;
+    }
+
+private:
+    vector<uint8_t> &_buf;
+    size_t _offset;
+    bool _ok;
+};
 
 enum nes_mapper_flags : uint16_t 
 {
@@ -49,6 +119,10 @@ class nes_memory;
 class nes_mapper
 {
 public :
+    virtual void serialize(vector<uint8_t> &out) const {}
+    virtual bool deserialize(const uint8_t *data, size_t size, size_t &offset) { return true; }
+    virtual uint16_t mapper_id() const = 0;
+
     //
     // Called when mapper is loaded into memory
     // Useful when all you need is a one-time memcpy
@@ -73,7 +147,7 @@ public :
     virtual void write_reg(uint16_t addr, uint8_t val) {};
 
     virtual void serialize(vector<uint8_t> &out) const {}
-    virtual bool deserialize(const uint8_t *&cursor, const uint8_t *end) { return true; }
+    virtual bool deserialize(const uint8_t *data, size_t size, size_t &offset) { return true; }
 
     virtual ~nes_mapper() {}
 };
@@ -94,6 +168,7 @@ public :
     virtual void on_load_ram(nes_memory &mem);
     virtual void on_load_ppu(nes_ppu &ppu);
     virtual void get_info(nes_mapper_info &info);
+    virtual uint16_t mapper_id() const { return 0; }
 
 private :
     shared_ptr<vector<uint8_t>> _prg_rom;
@@ -112,15 +187,22 @@ public :
         :_prg_rom(prg_rom), _chr_rom(chr_rom), _vertical_mirroring(vertical_mirroring)
     {
         _bit_latch = 0;
+        _reg = 0;
+        _control = 0x0c;
+        _chr_bank_0 = 0;
+        _chr_bank_1 = 0;
+        _prg_bank = 0;
     }
 
     virtual void on_load_ram(nes_memory &mem);
     virtual void on_load_ppu(nes_ppu &ppu);
     virtual void get_info(nes_mapper_info &info);
+    virtual void serialize(vector<uint8_t> &out) const;
+    virtual bool deserialize(const uint8_t *data, size_t size, size_t &offset);
 
     virtual void write_reg(uint16_t addr, uint8_t val);
     virtual void serialize(vector<uint8_t> &out) const;
-    virtual bool deserialize(const uint8_t *&cursor, const uint8_t *end);
+    virtual bool deserialize(const vector<uint8_t> &in, size_t &offset);
 
  private :
     void write_control(uint8_t val);
@@ -140,6 +222,9 @@ private :
     uint8_t _bit_latch;                         // for serial port
     uint8_t _reg;                               // current register being written
     uint8_t _control;                           // control register
+    uint8_t _chr_bank_0;                        // current CHR bank 0 register
+    uint8_t _chr_bank_1;                        // current CHR bank 1 register
+    uint8_t _prg_bank;                          // current PRG bank register
 };
 
 //
@@ -156,15 +241,18 @@ public:
         _prev_prg_mode = 1;
 
         _bank_select = 0;
+        memset(_bank_data, 0, sizeof(_bank_data));
     }
 
     virtual void on_load_ram(nes_memory &mem);
     virtual void on_load_ppu(nes_ppu &ppu);
     virtual void get_info(nes_mapper_info &info);
+    virtual void serialize(vector<uint8_t> &out) const;
+    virtual bool deserialize(const uint8_t *data, size_t size, size_t &offset);
 
     virtual void write_reg(uint16_t addr, uint8_t val);
     virtual void serialize(vector<uint8_t> &out) const;
-    virtual bool deserialize(const uint8_t *&cursor, const uint8_t *end);
+    virtual bool deserialize(const vector<uint8_t> &in, size_t &offset);
 
 private:
     void write_bank_select(uint8_t val);
@@ -186,6 +274,7 @@ private:
 
     uint8_t _bank_select;                       // control register
     uint8_t _prev_prg_mode;                     // previous prg mode
+    uint8_t _bank_data[8];                      // bank data registers
 };
 
 #define FLAG_6_USE_VERTICAL_MIRRORING_MASK 0x1
@@ -289,4 +378,3 @@ public :
         return mapper;
     }
 };
-

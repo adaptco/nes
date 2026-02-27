@@ -1,23 +1,28 @@
 #include "stdafx.h"
 #include <cstring>
 
-namespace {
-template <typename T>
-void append_value(vector<uint8_t> &out, const T &value)
+namespace
 {
-    const auto *ptr = reinterpret_cast<const uint8_t *>(&value);
-    out.insert(out.end(), ptr, ptr + sizeof(T));
-}
+    template<typename T>
+    void write_value(vector<uint8_t> &out, T value)
+    {
+        for (size_t i = 0; i < sizeof(T); ++i)
+            out.push_back(uint8_t((uint64_t(value) >> (i * 8)) & 0xff));
+    }
 
-template <typename T>
-bool read_value(const uint8_t *&cursor, const uint8_t *end, T &value)
-{
-    if (cursor + sizeof(T) > end)
-        return false;
-    memcpy(&value, cursor, sizeof(T));
-    cursor += sizeof(T);
-    return true;
-}
+    template<typename T>
+    bool read_value(const uint8_t *data, size_t size, size_t &offset, T &value)
+    {
+        if (offset + sizeof(T) > size)
+            return false;
+
+        uint64_t v = 0;
+        for (size_t i = 0; i < sizeof(T); ++i)
+            v |= uint64_t(data[offset++]) << (i * 8);
+
+        value = T(v);
+        return true;
+    }
 }
 
 void nes_memory::power_on(nes_system *system)
@@ -96,20 +101,22 @@ void nes_memory::set_byte(uint16_t addr, uint8_t val)
 
 void nes_memory::serialize(vector<uint8_t> &out) const
 {
-    const uint32_t ram_size = static_cast<uint32_t>(_ram.size());
-    append_value(out, ram_size);
     out.insert(out.end(), _ram.begin(), _ram.end());
+
+    if (_mapper)
+        _mapper->serialize(out);
 }
 
-bool nes_memory::deserialize(const uint8_t *&cursor, const uint8_t *end)
+bool nes_memory::deserialize(const uint8_t *data, size_t size, size_t &offset)
 {
-    uint32_t ram_size = 0;
-    if (!read_value(cursor, end, ram_size) || ram_size != _ram.size())
-        return false;
-    if (cursor + ram_size > end)
+    if (offset + RAM_SIZE > size)
         return false;
 
-    memcpy(_ram.data(), cursor, ram_size);
-    cursor += ram_size;
+    memcpy_s(_ram.data(), _ram.size(), data + offset, RAM_SIZE);
+    offset += RAM_SIZE;
+
+    if (_mapper)
+        return _mapper->deserialize(data, size, offset);
+
     return true;
 }
