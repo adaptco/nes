@@ -10,7 +10,7 @@ if ! command -v emcc >/dev/null 2>&1; then
   exit 1
 fi
 
-mkdir -p "$BUILD_DIR" "$OUT_DIR"
+mkdir -p "$OUT_DIR"
 
 # Build a minimal wasm module from the emulator core for browser integration.
 em++ \
