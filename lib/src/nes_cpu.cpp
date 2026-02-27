@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include <cstring>
 #include "nes_cpu.h"
 #include "nes_system.h"
 #include "nes_trace.h"
@@ -1540,3 +1541,45 @@ void nes_cpu::XAA(nes_addr_mode addr_mode) { assert(false); }
 void nes_cpu::AHX(nes_addr_mode addr_mode) { assert(false); }
 void nes_cpu::TAS(nes_addr_mode addr_mode) { assert(false); }
 void nes_cpu::LAS(nes_addr_mode addr_mode) { assert(false); }
+namespace {
+template <typename T>
+void cpu_append_value(vector<uint8_t> &out, const T &value)
+{
+    const auto *ptr = reinterpret_cast<const uint8_t *>(&value);
+    out.insert(out.end(), ptr, ptr + sizeof(T));
+}
+
+template <typename T>
+bool cpu_read_value(const uint8_t *&cursor, const uint8_t *end, T &value)
+{
+    if (cursor + sizeof(T) > end)
+        return false;
+    memcpy(&value, cursor, sizeof(T));
+    cursor += sizeof(T);
+    return true;
+}
+}
+
+void nes_cpu::serialize(vector<uint8_t> &out) const
+{
+    cpu_append_value(out, _context);
+    cpu_append_value(out, _cycle);
+    cpu_append_value(out, _nmi_pending);
+    cpu_append_value(out, _dma_pending);
+    cpu_append_value(out, _dma_addr);
+    cpu_append_value(out, _stop_at_infinite_loop);
+    cpu_append_value(out, _is_stop_at_addr);
+    cpu_append_value(out, _stop_at_addr);
+}
+
+bool nes_cpu::deserialize(const uint8_t *&cursor, const uint8_t *end)
+{
+    return cpu_read_value(cursor, end, _context)
+        && cpu_read_value(cursor, end, _cycle)
+        && cpu_read_value(cursor, end, _nmi_pending)
+        && cpu_read_value(cursor, end, _dma_pending)
+        && cpu_read_value(cursor, end, _dma_addr)
+        && cpu_read_value(cursor, end, _stop_at_infinite_loop)
+        && cpu_read_value(cursor, end, _is_stop_at_addr)
+        && cpu_read_value(cursor, end, _stop_at_addr);
+}

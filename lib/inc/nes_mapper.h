@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <nes_trace.h>
 #include <memory>
+#include <vector>
 #include <fstream>
 
 #include <common.h>
@@ -71,6 +72,9 @@ public :
     //
     virtual void write_reg(uint16_t addr, uint8_t val) {};
 
+    virtual void serialize(vector<uint8_t> &out) const {}
+    virtual bool deserialize(const uint8_t *&cursor, const uint8_t *end) { return true; }
+
     virtual ~nes_mapper() {}
 };
 
@@ -115,6 +119,8 @@ public :
     virtual void get_info(nes_mapper_info &info);
 
     virtual void write_reg(uint16_t addr, uint8_t val);
+    virtual void serialize(vector<uint8_t> &out) const;
+    virtual bool deserialize(const uint8_t *&cursor, const uint8_t *end);
 
  private :
     void write_control(uint8_t val);
@@ -157,6 +163,8 @@ public:
     virtual void get_info(nes_mapper_info &info);
 
     virtual void write_reg(uint16_t addr, uint8_t val);
+    virtual void serialize(vector<uint8_t> &out) const;
+    virtual bool deserialize(const uint8_t *&cursor, const uint8_t *end);
 
 private:
     void write_bank_select(uint8_t val);

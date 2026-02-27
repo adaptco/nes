@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include <cstring>
 
 #include "nes_cpu.h"
 #include "nes_system.h"
@@ -97,3 +98,71 @@ void nes_system::step(nes_cycle_t count)
     _ppu->step_to(_master_cycle);
 }
     
+namespace {
+constexpr uint32_t NES_STATE_MAGIC = 0x54534E45; // ENST
+constexpr uint32_t NES_STATE_VERSION = 1;
+
+template <typename T>
+void sys_append_value(vector<uint8_t> &out, const T &value)
+{
+    const auto *ptr = reinterpret_cast<const uint8_t *>(&value);
+    out.insert(out.end(), ptr, ptr + sizeof(T));
+}
+
+template <typename T>
+bool sys_read_value(const uint8_t *&cursor, const uint8_t *end, T &value)
+{
+    if (cursor + sizeof(T) > end)
+        return false;
+    memcpy(&value, cursor, sizeof(T));
+    cursor += sizeof(T);
+    return true;
+}
+}
+
+nes_system::nes_state nes_system::serialize() const
+{
+    nes_state state;
+    sys_append_value(state.bytes, NES_STATE_MAGIC);
+    sys_append_value(state.bytes, NES_STATE_VERSION);
+    sys_append_value(state.bytes, _master_cycle);
+    sys_append_value(state.bytes, _stop_requested);
+
+    _cpu->serialize(state.bytes);
+    _ram->serialize(state.bytes);
+    _ppu->serialize(state.bytes);
+    if (_ram)
+        _ram->get_mapper().serialize(state.bytes);
+    _input->serialize(state.bytes);
+
+    return state;
+}
+
+bool nes_system::deserialize(const nes_state &state)
+{
+    const uint8_t *cursor = state.bytes.data();
+    const uint8_t *end = cursor + state.bytes.size();
+
+    uint32_t magic = 0;
+    uint32_t version = 0;
+    if (!sys_read_value(cursor, end, magic) || !sys_read_value(cursor, end, version))
+        return false;
+    if (magic != NES_STATE_MAGIC || version != NES_STATE_VERSION)
+        return false;
+
+    if (!sys_read_value(cursor, end, _master_cycle) || !sys_read_value(cursor, end, _stop_requested))
+        return false;
+
+    if (!_cpu->deserialize(cursor, end))
+        return false;
+    if (!_ram->deserialize(cursor, end))
+        return false;
+    if (!_ppu->deserialize(cursor, end))
+        return false;
+    if (_ram && !_ram->get_mapper().deserialize(cursor, end))
+        return false;
+    if (!_input->deserialize(cursor, end))
+        return false;
+
+    return cursor == end;
+}

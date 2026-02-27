@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include <cstring>
 
 #include "nes_ppu.h"
 #include "nes_system.h"
@@ -574,4 +575,138 @@ void nes_ppu::step_ppu(nes_ppu_cycle_t count)
         }
         NES_TRACE4("[NES_PPU] SCANLINE " << std::dec << (uint32_t) _cur_scanline << " ------ ");
     }
+}
+namespace {
+template <typename T>
+void ppu_append_value(vector<uint8_t> &out, const T &value)
+{
+    const auto *ptr = reinterpret_cast<const uint8_t *>(&value);
+    out.insert(out.end(), ptr, ptr + sizeof(T));
+}
+
+template <typename T>
+bool ppu_read_value(const uint8_t *&cursor, const uint8_t *end, T &value)
+{
+    if (cursor + sizeof(T) > end)
+        return false;
+    memcpy(&value, cursor, sizeof(T));
+    cursor += sizeof(T);
+    return true;
+}
+}
+
+void nes_ppu::serialize(vector<uint8_t> &out) const
+{
+    ppu_append_value(out, _name_tbl_addr);
+    ppu_append_value(out, _bg_pattern_tbl_addr);
+    ppu_append_value(out, _sprite_pattern_tbl_addr);
+    ppu_append_value(out, _ppu_addr_inc);
+    ppu_append_value(out, _vblank_nmi);
+    ppu_append_value(out, _use_8x16_sprite);
+    ppu_append_value(out, _sprite_height);
+    ppu_append_value(out, _show_bg);
+    ppu_append_value(out, _show_sprites);
+    ppu_append_value(out, _gray_scale_mode);
+    ppu_append_value(out, _latch);
+    ppu_append_value(out, _sprite_overflow);
+    ppu_append_value(out, _vblank_started);
+    ppu_append_value(out, _sprite_0_hit);
+    ppu_append_value(out, _oam_addr);
+    ppu_append_value(out, _addr_toggle);
+    ppu_append_value(out, _ppu_addr);
+    ppu_append_value(out, _temp_ppu_addr);
+    ppu_append_value(out, _fine_x_scroll);
+    ppu_append_value(out, _scroll_y);
+    ppu_append_value(out, _vram_read_buf);
+    ppu_append_value(out, _master_cycle);
+    ppu_append_value(out, _scanline_cycle);
+    ppu_append_value(out, _cur_scanline);
+    ppu_append_value(out, _frame_count);
+    ppu_append_value(out, _protect_register);
+    ppu_append_value(out, _stop_after_frame);
+    ppu_append_value(out, _auto_stop);
+    ppu_append_value(out, _tile_index);
+    ppu_append_value(out, _tile_palette_bit32);
+    ppu_append_value(out, _bitplane0);
+    ppu_append_value(out, _shift_reg);
+    ppu_append_value(out, _x_offset);
+    ppu_append_value(out, _last_sprite_id);
+    ppu_append_value(out, _has_sprite_0);
+    ppu_append_value(out, _mask_oam_read);
+    ppu_append_value(out, _sprite_pos_y);
+    ppu_append_value(out, _mirroring_flags);
+
+    const uint8_t frame_buffer_id = (_frame_buffer == _frame_buffer_1) ? 1 : 2;
+    ppu_append_value(out, frame_buffer_id);
+
+    out.insert(out.end(), _vram.get(), _vram.get() + PPU_VRAM_SIZE);
+    out.insert(out.end(), _oam.get(), _oam.get() + PPU_OAM_SIZE);
+    out.insert(out.end(), _frame_buffer_1, _frame_buffer_1 + sizeof(_frame_buffer_1));
+    out.insert(out.end(), _frame_buffer_bg, _frame_buffer_bg + sizeof(_frame_buffer_bg));
+    out.insert(out.end(), _frame_buffer_2, _frame_buffer_2 + sizeof(_frame_buffer_2));
+    out.insert(out.end(), _pixel_cycle, _pixel_cycle + sizeof(_pixel_cycle));
+
+    const auto *sprite_buf = reinterpret_cast<const uint8_t *>(_sprite_buf);
+    out.insert(out.end(), sprite_buf, sprite_buf + sizeof(_sprite_buf));
+}
+
+bool nes_ppu::deserialize(const uint8_t *&cursor, const uint8_t *end)
+{
+    uint8_t frame_buffer_id = 0;
+    if (!(ppu_read_value(cursor, end, _name_tbl_addr)
+        && ppu_read_value(cursor, end, _bg_pattern_tbl_addr)
+        && ppu_read_value(cursor, end, _sprite_pattern_tbl_addr)
+        && ppu_read_value(cursor, end, _ppu_addr_inc)
+        && ppu_read_value(cursor, end, _vblank_nmi)
+        && ppu_read_value(cursor, end, _use_8x16_sprite)
+        && ppu_read_value(cursor, end, _sprite_height)
+        && ppu_read_value(cursor, end, _show_bg)
+        && ppu_read_value(cursor, end, _show_sprites)
+        && ppu_read_value(cursor, end, _gray_scale_mode)
+        && ppu_read_value(cursor, end, _latch)
+        && ppu_read_value(cursor, end, _sprite_overflow)
+        && ppu_read_value(cursor, end, _vblank_started)
+        && ppu_read_value(cursor, end, _sprite_0_hit)
+        && ppu_read_value(cursor, end, _oam_addr)
+        && ppu_read_value(cursor, end, _addr_toggle)
+        && ppu_read_value(cursor, end, _ppu_addr)
+        && ppu_read_value(cursor, end, _temp_ppu_addr)
+        && ppu_read_value(cursor, end, _fine_x_scroll)
+        && ppu_read_value(cursor, end, _scroll_y)
+        && ppu_read_value(cursor, end, _vram_read_buf)
+        && ppu_read_value(cursor, end, _master_cycle)
+        && ppu_read_value(cursor, end, _scanline_cycle)
+        && ppu_read_value(cursor, end, _cur_scanline)
+        && ppu_read_value(cursor, end, _frame_count)
+        && ppu_read_value(cursor, end, _protect_register)
+        && ppu_read_value(cursor, end, _stop_after_frame)
+        && ppu_read_value(cursor, end, _auto_stop)
+        && ppu_read_value(cursor, end, _tile_index)
+        && ppu_read_value(cursor, end, _tile_palette_bit32)
+        && ppu_read_value(cursor, end, _bitplane0)
+        && ppu_read_value(cursor, end, _shift_reg)
+        && ppu_read_value(cursor, end, _x_offset)
+        && ppu_read_value(cursor, end, _last_sprite_id)
+        && ppu_read_value(cursor, end, _has_sprite_0)
+        && ppu_read_value(cursor, end, _mask_oam_read)
+        && ppu_read_value(cursor, end, _sprite_pos_y)
+        && ppu_read_value(cursor, end, _mirroring_flags)
+        && ppu_read_value(cursor, end, frame_buffer_id)))
+    {
+        return false;
+    }
+
+    if (cursor + PPU_VRAM_SIZE + PPU_OAM_SIZE + sizeof(_frame_buffer_1) + sizeof(_frame_buffer_bg) + sizeof(_frame_buffer_2) + sizeof(_pixel_cycle) + sizeof(_sprite_buf) > end)
+        return false;
+
+    memcpy(_vram.get(), cursor, PPU_VRAM_SIZE); cursor += PPU_VRAM_SIZE;
+    memcpy(_oam.get(), cursor, PPU_OAM_SIZE); cursor += PPU_OAM_SIZE;
+    memcpy(_frame_buffer_1, cursor, sizeof(_frame_buffer_1)); cursor += sizeof(_frame_buffer_1);
+    memcpy(_frame_buffer_bg, cursor, sizeof(_frame_buffer_bg)); cursor += sizeof(_frame_buffer_bg);
+    memcpy(_frame_buffer_2, cursor, sizeof(_frame_buffer_2)); cursor += sizeof(_frame_buffer_2);
+    memcpy(_pixel_cycle, cursor, sizeof(_pixel_cycle)); cursor += sizeof(_pixel_cycle);
+    memcpy(_sprite_buf, cursor, sizeof(_sprite_buf)); cursor += sizeof(_sprite_buf);
+
+    _frame_buffer = (frame_buffer_id == 1) ? _frame_buffer_1 : _frame_buffer_2;
+    return true;
 }

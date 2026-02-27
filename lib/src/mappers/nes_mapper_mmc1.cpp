@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include <cstring>
 
 //
 // Called when mapper is loaded into memory
@@ -178,4 +179,46 @@ void nes_mapper_mmc1::write_prg_bank(uint8_t val)
         // 32KB mode at $8000
         _mem->set_bytes(0x8000, _prg_rom->data() + (val & 0xe) * 0x4000, 0x8000);
     }
+}
+namespace {
+template <typename T>
+void mmc1_append_value(vector<uint8_t> &out, const T &value)
+{
+    const auto *ptr = reinterpret_cast<const uint8_t *>(&value);
+    out.insert(out.end(), ptr, ptr + sizeof(T));
+}
+
+template <typename T>
+bool mmc1_read_value(const uint8_t *&cursor, const uint8_t *end, T &value)
+{
+    if (cursor + sizeof(T) > end)
+        return false;
+    memcpy(&value, cursor, sizeof(T));
+    cursor += sizeof(T);
+    return true;
+}
+}
+
+void nes_mapper_mmc1::serialize(vector<uint8_t> &out) const
+{
+    mmc1_append_value(out, _vertical_mirroring);
+    mmc1_append_value(out, _bit_latch);
+    mmc1_append_value(out, _reg);
+    mmc1_append_value(out, _control);
+}
+
+bool nes_mapper_mmc1::deserialize(const uint8_t *&cursor, const uint8_t *end)
+{
+    if (!mmc1_read_value(cursor, end, _vertical_mirroring)
+        || !mmc1_read_value(cursor, end, _bit_latch)
+        || !mmc1_read_value(cursor, end, _reg)
+        || !mmc1_read_value(cursor, end, _control))
+    {
+        return false;
+    }
+
+    if (_ppu)
+        _ppu->set_mirroring(nes_mapper_flags(_control & nes_mapper_flags_mirroring_mask));
+
+    return true;
 }

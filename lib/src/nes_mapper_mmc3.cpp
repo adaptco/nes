@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include <cstring>
 
 //
 // Called when mapper is loaded into memory
@@ -221,3 +222,44 @@ void nes_mapper_mmc3::write_bank_data(uint8_t val)
     }
 }
 
+
+namespace {
+template <typename T>
+void mmc3_append_value(vector<uint8_t> &out, const T &value)
+{
+    const auto *ptr = reinterpret_cast<const uint8_t *>(&value);
+    out.insert(out.end(), ptr, ptr + sizeof(T));
+}
+
+template <typename T>
+bool mmc3_read_value(const uint8_t *&cursor, const uint8_t *end, T &value)
+{
+    if (cursor + sizeof(T) > end)
+        return false;
+    memcpy(&value, cursor, sizeof(T));
+    cursor += sizeof(T);
+    return true;
+}
+}
+
+void nes_mapper_mmc3::serialize(vector<uint8_t> &out) const
+{
+    mmc3_append_value(out, _vertical_mirroring);
+    mmc3_append_value(out, _bank_select);
+    mmc3_append_value(out, _prev_prg_mode);
+}
+
+bool nes_mapper_mmc3::deserialize(const uint8_t *&cursor, const uint8_t *end)
+{
+    if (!mmc3_read_value(cursor, end, _vertical_mirroring)
+        || !mmc3_read_value(cursor, end, _bank_select)
+        || !mmc3_read_value(cursor, end, _prev_prg_mode))
+    {
+        return false;
+    }
+
+    if (_ppu)
+        _ppu->set_mirroring(nes_mapper_flags(_vertical_mirroring ? nes_mapper_flags_vertical_mirroring : nes_mapper_flags_horizontal_mirroring));
+
+    return true;
+}

@@ -446,6 +446,9 @@ public :
 
     void oam_dma(uint16_t addr);
 
+    void serialize(vector<uint8_t> &out) const;
+    bool deserialize(const uint8_t *&cursor, const uint8_t *end);
+
 private :
     struct sprite_info
     {
