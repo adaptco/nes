@@ -74,6 +74,37 @@ docker run --rm -it -v "$PWD":/workspace/nes -w /workspace/nes neschan-dev
 
 From inside the container, run your preferred build commands (for example CMake/Ninja).
 
+### Backend Docker shell (game engine + embedded models)
+
+Use the backend container when you want a reproducible shell that includes the emulator toolchain and a bundled model directory.
+
+1. Put model artifacts under `models/` (these are copied to `/opt/nes/models` at image build time).
+2. Launch the backend shell:
+
+```bash
+./scripts/backend-shell.sh
+```
+
+Or run manually:
+
+```bash
+docker compose -f docker-compose.backend.yml build nes-backend
+docker compose -f docker-compose.backend.yml run --rm nes-backend
+```
+
+Inside the container, build and run headless replay/deployment commands as needed. Example:
+
+```bash
+./build.sh
+./bin/neschan/neschan <rom_path> --headless --max-frames 600
+```
+
+Environment variables available in the shell:
+
+* `NES_MODEL_DIR=/opt/nes/models`
+* `NES_ROM_DIR=/workspace/nes/roms`
+
+
 ## How to build
 
 ### Building on Windows
