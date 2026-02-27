@@ -74,36 +74,25 @@ docker run --rm -it -v "$PWD":/workspace/nes -w /workspace/nes neschan-dev
 
 From inside the container, run your preferred build commands (for example CMake/Ninja).
 
-### Backend Docker shell (game engine + embedded models)
 
-Use the backend container when you want a reproducible shell that includes the emulator toolchain and a bundled model directory.
+## Linux VM + WASM runtime dock
 
-1. Put model artifacts under `models/` (these are copied to `/opt/nes/models` at image build time).
-2. Launch the backend shell:
+To deploy from the repo root as a Linux server target with a browser canvas:
 
 ```bash
-./scripts/backend-shell.sh
+cd deploy/linux-vm
+vagrant up
 ```
 
-Or run manually:
+Inside the VM:
 
 ```bash
-docker compose -f docker-compose.backend.yml build nes-backend
-docker compose -f docker-compose.backend.yml run --rm nes-backend
+cd /workspace/nes
+./scripts/build_wasm_runtime.sh
+./scripts/run_wasm_server.sh
 ```
 
-Inside the container, build and run headless replay/deployment commands as needed. Example:
-
-```bash
-./build.sh
-./bin/neschan/neschan <rom_path> --headless --max-frames 600
-```
-
-Environment variables available in the shell:
-
-* `NES_MODEL_DIR=/opt/nes/models`
-* `NES_ROM_DIR=/workspace/nes/roms`
-
+Open `http://192.168.56.48:8080` for the LLM canvas shell (`web/llm-canvas/index.html`).
 
 ## How to build
 
