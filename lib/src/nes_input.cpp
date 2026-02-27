@@ -4,93 +4,74 @@
 #include <nes_input.h>
 #include <nes_mapper.h>
 
-namespace
-{
-    template<typename T>
-    void write_value(vector<uint8_t> &out, T value)
-    {
-        for (size_t i = 0; i < sizeof(T); ++i)
-            out.push_back(uint8_t((uint64_t(value) >> (i * 8)) & 0xff));
-    }
-
-    template<typename T>
-    bool read_value(const uint8_t *data, size_t size, size_t &offset, T &value)
-    {
-        if (offset + sizeof(T) > size)
-            return false;
-
-        uint64_t v = 0;
-        for (size_t i = 0; i < sizeof(T); ++i)
-            v |= uint64_t(data[offset++]) << (i * 8);
-
-        value = T(v);
-        return true;
-    }
-}
-
-namespace {
-template <typename T>
-void input_append_value(vector<uint8_t> &out, const T &value)
-{
-    const auto *ptr = reinterpret_cast<const uint8_t *>(&value);
-    out.insert(out.end(), ptr, ptr + sizeof(T));
-}
-
-template <typename T>
-bool input_read_value(const uint8_t *&cursor, const uint8_t *end, T &value)
-{
-    if (cursor + sizeof(T) > end)
-        return false;
-    memcpy(&value, cursor, sizeof(T));
-    cursor += sizeof(T);
-    return true;
-}
-}
 
 // Make compiler happy about pure virtual dtors
 nes_input_device::~nes_input_device()
 {}
-namespace
+
+
+void nes_input::init()
 {
-    template <typename T>
-    void append_state(std::vector<uint8_t> &out, const T &value)
+    _strobe_on = false;
+    for (int i = 0; i < NES_MAX_PLAYER; ++i)
     {
-        auto begin = reinterpret_cast<const uint8_t *>(&value);
-        out.insert(out.end(), begin, begin + sizeof(T));
+        _button_flags[i] = nes_button_flags_none;
+        _button_id[i] = 0;
     }
+}
 
-    template <typename T>
-    bool read_state(const std::vector<uint8_t> &in, size_t &offset, T *value)
+void nes_input::reload()
+{
+    for (int i = 0; i < NES_MAX_PLAYER; ++i)
     {
-        if (offset + sizeof(T) > in.size())
-            return false;
+        auto user_input = _user_inputs[i];
+        if (user_input)
+            _button_flags[i] = user_input->poll_status();
+        else
+            _button_flags[i] = nes_button_flags_none;
 
-        memcpy(value, in.data() + offset, sizeof(T));
-        offset += sizeof(T);
-        return true;
+        _button_id[i] = 0;
     }
+}
+
+void nes_input::write_CONTROLLER(uint8_t val)
+{
+    bool prev_strobe = _strobe_on;
+    _strobe_on = (val & NES_CONTROLLER_STROBE_BIT) != 0;
+    if (prev_strobe && !_strobe_on)
+        reload();
+}
+
+uint8_t nes_input::read_CONTROLLER(uint8_t id)
+{
+    if (_strobe_on)
+        reload();
+
+    return 0x40 | ((_button_flags[id] >> (7 - _button_id[id]++)) & 0x1);
 }
 
 void nes_input::serialize(vector<uint8_t> &out) const
 {
-    append_state(out, _strobe_on);
-    out.insert(out.end(), reinterpret_cast<const uint8_t *>(_button_flags), reinterpret_cast<const uint8_t *>(_button_flags) + sizeof(_button_flags));
-    out.insert(out.end(), _button_id, _button_id + sizeof(_button_id));
+    out.push_back(_strobe_on ? 1 : 0);
+    for (int i = 0; i < NES_MAX_PLAYER; ++i)
+    {
+        out.push_back(uint8_t(_button_flags[i]));
+        out.push_back(_button_id[i]);
+    }
 }
 
-bool nes_input::deserialize(const vector<uint8_t> &in, size_t &offset)
+bool nes_input::deserialize(const uint8_t *data, size_t size, size_t &offset)
 {
-    bool ok = read_state(in, offset, &_strobe_on);
-    if (!ok)
+    const size_t bytes = 1 + NES_MAX_PLAYER * 2;
+    if (offset + bytes > size)
         return false;
 
-    if (offset + sizeof(_button_flags) + sizeof(_button_id) > in.size())
-        return false;
-
-    memcpy(_button_flags, in.data() + offset, sizeof(_button_flags));
-    offset += sizeof(_button_flags);
-    memcpy(_button_id, in.data() + offset, sizeof(_button_id));
-    offset += sizeof(_button_id);
+    _strobe_on = data[offset++] != 0;
+    for (int i = 0; i < NES_MAX_PLAYER; ++i)
+    {
+        _button_flags[i] = nes_button_flags(data[offset++]);
+        _button_id[i] = data[offset++];
+    }
 
     return true;
 }

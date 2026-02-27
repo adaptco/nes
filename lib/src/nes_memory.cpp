@@ -103,8 +103,22 @@ void nes_memory::serialize(vector<uint8_t> &out) const
 {
     out.insert(out.end(), _ram.begin(), _ram.end());
 
-    if (_mapper)
-        _mapper->serialize(out);
+    uint8_t has_mapper = _mapper ? 1 : 0;
+    out.push_back(has_mapper);
+    if (!_mapper)
+        return;
+
+    uint16_t mapper_id = _mapper->mapper_id();
+    out.push_back(uint8_t(mapper_id & 0xff));
+    out.push_back(uint8_t((mapper_id >> 8) & 0xff));
+
+    vector<uint8_t> mapper_state;
+    _mapper->serialize(mapper_state);
+    uint32_t mapper_size = uint32_t(mapper_state.size());
+    for (int i = 0; i < 4; ++i)
+        out.push_back(uint8_t((mapper_size >> (i * 8)) & 0xff));
+
+    out.insert(out.end(), mapper_state.begin(), mapper_state.end());
 }
 
 bool nes_memory::deserialize(const uint8_t *data, size_t size, size_t &offset)
@@ -115,8 +129,34 @@ bool nes_memory::deserialize(const uint8_t *data, size_t size, size_t &offset)
     memcpy_s(_ram.data(), _ram.size(), data + offset, RAM_SIZE);
     offset += RAM_SIZE;
 
-    if (_mapper)
-        return _mapper->deserialize(data, size, offset);
+    if (offset >= size)
+        return false;
+
+    bool has_mapper_state = data[offset++] != 0;
+    if (!has_mapper_state)
+        return true;
+
+    if (!_mapper || offset + 6 > size)
+        return false;
+
+    uint16_t mapper_id = uint16_t(data[offset]) | (uint16_t(data[offset + 1]) << 8);
+    offset += 2;
+    if (mapper_id != _mapper->mapper_id())
+        return false;
+
+    uint32_t mapper_size = 0;
+    for (int i = 0; i < 4; ++i)
+        mapper_size |= uint32_t(data[offset++]) << (i * 8);
+
+    if (offset + mapper_size > size)
+        return false;
+
+    size_t mapper_offset = offset;
+    bool ok = _mapper->deserialize(data, offset + mapper_size, mapper_offset);
+    if (!ok || mapper_offset != offset + mapper_size)
+        return false;
+
+    offset += mapper_size;
 
     return true;
 }

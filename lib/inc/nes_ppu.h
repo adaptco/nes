@@ -168,9 +168,6 @@ public :
 
     void set_mirroring(nes_mapper_flags flags);
 
-    void serialize(vector<uint8_t> &out) const;
-    bool deserialize(const uint8_t *data, size_t size, size_t &offset);
-
     // Returns the latest fully rendered frame buffer (double-buffered read buffer).
     // Contract:
     // - This pointer always points to the completed frame.
@@ -474,8 +471,6 @@ public :
 
     void oam_dma(uint16_t addr);
 
-    void serialize(vector<uint8_t> &out) const;
-    bool deserialize(const vector<uint8_t> &in, size_t &offset);
 
 private :
     struct sprite_info

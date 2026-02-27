@@ -69,24 +69,32 @@ void nes_mapper_mmc1::get_info(nes_mapper_info &info)
 
 void nes_mapper_mmc1::serialize(vector<uint8_t> &out) const
 {
+    out.push_back(_vertical_mirroring ? 1 : 0);
     out.push_back(_bit_latch);
     out.push_back(_reg);
     out.push_back(_control);
-    out.push_back(_vertical_mirroring ? 1 : 0);
+    out.push_back(_chr_bank_0);
+    out.push_back(_chr_bank_1);
+    out.push_back(_prg_bank);
 }
 
 bool nes_mapper_mmc1::deserialize(const uint8_t *data, size_t size, size_t &offset)
 {
-    if (offset + 4 > size)
+    if (offset + 7 > size)
         return false;
 
+    _vertical_mirroring = data[offset++] != 0;
     _bit_latch = data[offset++];
     _reg = data[offset++];
     _control = data[offset++];
-    _vertical_mirroring = data[offset++] != 0;
+    _chr_bank_0 = data[offset++];
+    _chr_bank_1 = data[offset++];
+    _prg_bank = data[offset++];
 
-    if (_ppu)
-        _ppu->set_mirroring(nes_mapper_flags(_control & nes_mapper_flags_mirroring_mask));
+    write_control(_control);
+    write_chr_bank_0(_chr_bank_0);
+    write_chr_bank_1(_chr_bank_1);
+    write_prg_bank(_prg_bank);
 
     return true;
 }
@@ -234,55 +242,3 @@ void nes_mapper_mmc1::write_prg_bank(uint8_t val)
     }
 }
 
-namespace
-{
-    template <typename T>
-    void append_state(std::vector<uint8_t> &out, const T &value)
-    {
-        auto begin = reinterpret_cast<const uint8_t *>(&value);
-        out.insert(out.end(), begin, begin + sizeof(T));
-    }
-
-    template <typename T>
-    bool read_state(const std::vector<uint8_t> &in, size_t &offset, T *value)
-    {
-        if (offset + sizeof(T) > in.size())
-            return false;
-
-        memcpy(value, in.data() + offset, sizeof(T));
-        offset += sizeof(T);
-        return true;
-    }
-}
-
-void nes_mapper_mmc1::serialize(vector<uint8_t> &out) const
-{
-    append_state(out, _vertical_mirroring);
-    append_state(out, _bit_latch);
-    append_state(out, _reg);
-    append_state(out, _control);
-    append_state(out, _chr_bank_0);
-    append_state(out, _chr_bank_1);
-    append_state(out, _prg_bank);
-}
-
-bool nes_mapper_mmc1::deserialize(const vector<uint8_t> &in, size_t &offset)
-{
-    bool ok =
-        read_state(in, offset, &_vertical_mirroring) &&
-        read_state(in, offset, &_bit_latch) &&
-        read_state(in, offset, &_reg) &&
-        read_state(in, offset, &_control) &&
-        read_state(in, offset, &_chr_bank_0) &&
-        read_state(in, offset, &_chr_bank_1) &&
-        read_state(in, offset, &_prg_bank);
-
-    if (!ok)
-        return false;
-
-    write_control(_control);
-    write_chr_bank_0(_chr_bank_0);
-    write_chr_bank_1(_chr_bank_1);
-    write_prg_bank(_prg_bank);
-    return true;
-}
