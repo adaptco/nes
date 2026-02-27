@@ -79,7 +79,7 @@ class SimulationRuntime:
 
             old_pos = (state.x, state.y)
             state.x, state.y, move_note = self._resolve_move(state, action)
-            move_cost = self.config.move_energy_cost if old_pos != (state.x, state.y) else self.config.idle_energy_cost
+            move_cost = self.config.move_energy_cost if action.move != "STAY" else self.config.idle_energy_cost
 
             energy_delta, score_delta, cell_note = self._apply_cell_effects(state)
             net_energy = energy_delta - move_cost
