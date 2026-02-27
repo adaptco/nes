@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -13,6 +14,30 @@ class nes_memory;
 class nes_apu;
 class nes_ppu;
 class nes_input;
+
+struct nes_memory_view
+{
+    const uint8_t *data;
+    size_t size;
+};
+
+struct nes_system_snapshot
+{
+    // Frame metadata captured at snapshot creation time.
+    uint32_t frame_count;
+
+    // Completed frame buffer (palette index bytes), width x height bytes.
+    const uint8_t *frame_buffer;
+    uint16_t frame_width;
+    uint16_t frame_height;
+
+    // Physical CPU RAM (2 KB at $0000-$07ff, mirrored by CPU addressing logic).
+    nes_memory_view cpu_ram;
+
+    // PPU VRAM (0x4000 bytes) and sprite OAM (0x100 bytes).
+    nes_memory_view ppu_vram;
+    nes_memory_view ppu_oam;
+};
 
 enum nes_rom_exec_mode
 {
@@ -59,6 +84,11 @@ struct nes_state_blob
 class nes_system
 {
 public :
+    struct nes_state
+    {
+        vector<uint8_t> data;
+    };
+
     nes_system();
     ~nes_system();
 
@@ -73,6 +103,9 @@ public :
     void run_rom(const char *rom_path, nes_rom_exec_mode mode);
 
     void load_rom(const char *rom_path, nes_rom_exec_mode mode);
+
+    nes_state serialize() const;
+    bool deserialize(const nes_state &state);
    
     nes_cpu     *cpu()      { return _cpu.get();   }
     nes_memory  *ram()      { return _ram.get();   }

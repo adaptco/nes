@@ -74,6 +74,26 @@ docker run --rm -it -v "$PWD":/workspace/nes -w /workspace/nes neschan-dev
 
 From inside the container, run your preferred build commands (for example CMake/Ninja).
 
+
+## Linux VM + WASM runtime dock
+
+To deploy from the repo root as a Linux server target with a browser canvas:
+
+```bash
+cd deploy/linux-vm
+vagrant up
+```
+
+Inside the VM:
+
+```bash
+cd /workspace/nes
+./scripts/build_wasm_runtime.sh
+./scripts/run_wasm_server.sh
+```
+
+Open `http://192.168.56.48:8080` for the LLM canvas shell (`web/llm-canvas/index.html`).
+
 ## How to build
 
 ### Building on Windows
@@ -106,6 +126,14 @@ You'll need SDL2, XCode developer build tools, CMake.
 neschan.exe *rom_path* 
 
 Sorry. No fancy UI yet. 
+
+Deterministic replay/headless example:
+
+```
+neschan <rom_path> --replay input.log --headless --max-frames 600
+```
+
+Replay log format is `<frame_index> <button_flags>`; see `doc/replay_input_log.md`.
 
 ## Next steps
 

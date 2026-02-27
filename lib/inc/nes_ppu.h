@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <vector>
 
 #include <nes_component.h>
 #include <nes_cycle.h>
@@ -161,6 +162,9 @@ public :
     bool is_render_off() { return !_show_bg && !_show_sprites; }
 
     void load_mapper(shared_ptr<nes_mapper> &mapper);
+
+    void serialize(vector<uint8_t> &out) const;
+    bool deserialize(const uint8_t *data, size_t size, size_t &offset);
 
     void set_mirroring(nes_mapper_flags flags);
 
@@ -469,6 +473,9 @@ public :
     void write_OAMDMA(uint8_t val);
 
     void oam_dma(uint16_t addr);
+
+    void serialize(vector<uint8_t> &out) const;
+    bool deserialize(const vector<uint8_t> &in, size_t &offset);
 
 private :
     struct sprite_info

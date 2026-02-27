@@ -1,7 +1,32 @@
 #include "stdafx.h"
+#include <cstring>
 #include "nes_cpu.h"
 #include "nes_system.h"
 #include "nes_trace.h"
+
+namespace
+{
+    template<typename T>
+    void write_value(vector<uint8_t> &out, T value)
+    {
+        for (size_t i = 0; i < sizeof(T); ++i)
+            out.push_back(uint8_t((uint64_t(value) >> (i * 8)) & 0xff));
+    }
+
+    template<typename T>
+    bool read_value(const uint8_t *data, size_t size, size_t &offset, T &value)
+    {
+        if (offset + sizeof(T) > size)
+            return false;
+
+        uint64_t v = 0;
+        for (size_t i = 0; i < sizeof(T); ++i)
+            v |= uint64_t(data[offset++]) << (i * 8);
+
+        value = T(v);
+        return true;
+    }
+}
 
 void nes_cpu::power_on(nes_system *system)
 {
@@ -94,6 +119,50 @@ void nes_cpu::step_to(nes_cycle_t new_count)
     // we are asked to proceed to new_count - keep executing one instruction
     while (_cycle < new_count && !_system->stop_requested())
         exec_one_instruction();    
+}
+
+void nes_cpu::serialize(vector<uint8_t> &out) const
+{
+    write_value(out, _context.A);
+    write_value(out, _context.X);
+    write_value(out, _context.Y);
+    write_value(out, _context.PC);
+    write_value(out, _context.S);
+    write_value(out, _context.P);
+    write_value(out, _cycle.count());
+    write_value(out, uint8_t(_nmi_pending ? 1 : 0));
+    write_value(out, uint8_t(_dma_pending ? 1 : 0));
+    write_value(out, _dma_addr);
+    write_value(out, uint8_t(_stop_at_infinite_loop ? 1 : 0));
+    write_value(out, uint8_t(_is_stop_at_addr ? 1 : 0));
+    write_value(out, _stop_at_addr);
+}
+
+bool nes_cpu::deserialize(const uint8_t *data, size_t size, size_t &offset)
+{
+    int64_t cycle = 0;
+    uint8_t b = 0;
+
+    if (!read_value(data, size, offset, _context.A)) return false;
+    if (!read_value(data, size, offset, _context.X)) return false;
+    if (!read_value(data, size, offset, _context.Y)) return false;
+    if (!read_value(data, size, offset, _context.PC)) return false;
+    if (!read_value(data, size, offset, _context.S)) return false;
+    if (!read_value(data, size, offset, _context.P)) return false;
+    if (!read_value(data, size, offset, cycle)) return false;
+    _cycle = nes_cycle_t(cycle);
+    if (!read_value(data, size, offset, b)) return false;
+    _nmi_pending = (b != 0);
+    if (!read_value(data, size, offset, b)) return false;
+    _dma_pending = (b != 0);
+    if (!read_value(data, size, offset, _dma_addr)) return false;
+    if (!read_value(data, size, offset, b)) return false;
+    _stop_at_infinite_loop = (b != 0);
+    if (!read_value(data, size, offset, b)) return false;
+    _is_stop_at_addr = (b != 0);
+    if (!read_value(data, size, offset, _stop_at_addr)) return false;
+
+    return true;
 }
 
 #define IS_ALU_OP_CODE_(op, offset, mode) case nes_op_code::op##_base + offset : NES_TRACE4(get_op_str(#op, nes_addr_mode::nes_addr_mode_##mode)); op(nes_addr_mode::nes_addr_mode_##mode); break; 
@@ -1596,3 +1665,69 @@ void nes_cpu::XAA(nes_addr_mode addr_mode) { assert(false); }
 void nes_cpu::AHX(nes_addr_mode addr_mode) { assert(false); }
 void nes_cpu::TAS(nes_addr_mode addr_mode) { assert(false); }
 void nes_cpu::LAS(nes_addr_mode addr_mode) { assert(false); }
+namespace
+{
+    template <typename T>
+    void append_state(std::vector<uint8_t> &out, const T &value)
+    {
+        auto begin = reinterpret_cast<const uint8_t *>(&value);
+        out.insert(out.end(), begin, begin + sizeof(T));
+    }
+
+    template <typename T>
+    bool read_state(const std::vector<uint8_t> &in, size_t &offset, T *value)
+    {
+        if (offset + sizeof(T) > in.size())
+            return false;
+
+        memcpy(value, in.data() + offset, sizeof(T));
+        offset += sizeof(T);
+        return true;
+    }
+}
+
+void nes_cpu::serialize(vector<uint8_t> &out) const
+{
+    append_state(out, _context.A);
+    append_state(out, _context.X);
+    append_state(out, _context.Y);
+    append_state(out, _context.PC);
+    append_state(out, _context.S);
+    append_state(out, _context.P);
+
+    int64_t cycle = _cycle.count();
+    append_state(out, cycle);
+
+    append_state(out, _nmi_pending);
+    append_state(out, _dma_pending);
+    append_state(out, _dma_addr);
+    append_state(out, _stop_at_infinite_loop);
+    append_state(out, _is_stop_at_addr);
+    append_state(out, _stop_at_addr);
+}
+
+bool nes_cpu::deserialize(const vector<uint8_t> &in, size_t &offset)
+{
+    int64_t cycle;
+
+    bool ok =
+        read_state(in, offset, &_context.A) &&
+        read_state(in, offset, &_context.X) &&
+        read_state(in, offset, &_context.Y) &&
+        read_state(in, offset, &_context.PC) &&
+        read_state(in, offset, &_context.S) &&
+        read_state(in, offset, &_context.P) &&
+        read_state(in, offset, &cycle) &&
+        read_state(in, offset, &_nmi_pending) &&
+        read_state(in, offset, &_dma_pending) &&
+        read_state(in, offset, &_dma_addr) &&
+        read_state(in, offset, &_stop_at_infinite_loop) &&
+        read_state(in, offset, &_is_stop_at_addr) &&
+        read_state(in, offset, &_stop_at_addr);
+
+    if (!ok)
+        return false;
+
+    _cycle = nes_cycle_t(cycle);
+    return true;
+}
