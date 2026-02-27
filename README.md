@@ -92,7 +92,7 @@ cd /workspace/nes
 ./scripts/run_wasm_server.sh
 ```
 
-Open `http://<vm-ip>:8080` for the LLM canvas shell (`web/llm-canvas/index.html`).
+Open `http://192.168.56.48:8080` for the LLM canvas shell (`web/llm-canvas/index.html`).
 
 ## How to build
 
