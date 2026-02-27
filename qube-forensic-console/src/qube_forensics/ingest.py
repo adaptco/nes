@@ -16,7 +16,7 @@ class IngestConfig:
     forensic_schema_path: Path
     telemetry_schema_path: Path
     telemetry_store_path: Path
-    source_system: str = "QUBE_FORensics"
+    source_system: str = "QUBE_FORENSICS"
     payload_type: str = "qube_forensic_report.v1"
 
 
