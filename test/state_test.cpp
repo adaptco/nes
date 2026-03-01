@@ -19,5 +19,5 @@ TEST_CASE("NES state serialize/deserialize round-trip") {
     CHECK(system.deserialize(saved));
 
     nes_state_blob restored = system.serialize();
-    CHECK(restored.bytes == saved.bytes);
+    CHECK(restored.data == saved.data);
 }

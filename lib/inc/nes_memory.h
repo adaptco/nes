@@ -24,10 +24,8 @@ public :
 
     bool is_io_reg(uint16_t addr)
     {
-        // $2000~$2007
         if ((addr & 0xfff8) == 0x2000)
             return true;
-        // $4000~401f
         if ((addr & 0xffe0) == 0x4000)
             return true;
         return false;
@@ -41,13 +39,11 @@ public :
         redirect_addr(addr);
         if (is_io_reg(addr))
             return read_io_reg(addr);
-
         return _ram[addr];
     }
 
     uint16_t get_word(uint16_t addr)
     {
-        // NES 6502 CPU is little endian
         return get_byte(addr) + (uint16_t(get_byte(addr + 1)) << 8);
     }
 
@@ -69,7 +65,6 @@ public :
 
     void set_word(uint16_t addr, uint16_t value)
     {
-        // NES 6502 CPU is little endian
         set_byte(addr, value & 0xff);
         set_byte(addr + 1, (value >> 8));
     }
@@ -77,15 +72,9 @@ public :
     void redirect_addr(uint16_t &addr)
     {
         if ((addr & 0xE000) == 0)
-        {
-            // map 0x0000~0x07ff 4 times until 0x1fff
             addr &= 0x7ff;
-        }
         else if ((addr & 0xE000) == 0x2000)
-        {
-            // map 0x2000~0x2008 every 8 bytes until 0x3fff
             addr &= 0x2007;
-        }
     }
 
     void load_mapper(shared_ptr<nes_mapper> &mapper);
@@ -98,28 +87,15 @@ public :
     bool has_mapper() const { return _mapper != nullptr; }
 
     void serialize(vector<uint8_t> &out) const;
-    bool deserialize(const uint8_t *&ptr, const uint8_t *end);
-
-    void serialize(vector<uint8_t> &out) const;
     bool deserialize(const uint8_t *data, size_t size, size_t &offset);
 
 public :
-    //
-    // nes_component overrides
-    //
     virtual void power_on(nes_system *system);
-    virtual void reset()
-    {
-        // Do nothing
-    }
-
-    virtual void step_to(nes_cycle_t count)
-    {
-        // Do nothing
-    }
+    virtual void reset() {}
+    virtual void step_to(nes_cycle_t count) {}
 
 private :
-    vector<uint8_t>        _ram;
+    vector<uint8_t> _ram;
     shared_ptr<nes_mapper> _mapper;
 
     nes_system *_system;
